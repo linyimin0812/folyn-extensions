@@ -57,24 +57,26 @@ Fork 本仓库，编辑 `catalog.json`，在 `extensions` 数组末尾加一条�
 ```json
 {
   "id": "my-ext",
-  "name": "My Extension",
+  "name": { "zh": "我的扩展", "en": "My Extension" },
   "version": "0.2.0",
-  "description": "一句话说明扩展做什么",
+  "description": { "zh": "一句话说明扩展做什么", "en": "One-line description" },
   "tier": "sandbox",
   "author": "your-github-username",
-  "icon": "🧩",
+  "icon": "<svg viewBox="0 0 16 16" ...>...</svg>",
   "downloadUrl": "https://github.com/<your-github-username>/<your-extension-repo>/releases/download/my-ext-0.2.0/my-ext-0.2.0.zip"
 }
 ```
+
+> `name`/`description` 也可写成纯字符串（如 `"name": "DBML"`），此时所有语言都显示该字符串。多语言对象则按用户当前语言渲染，缺失时回退 zh → en → 第一个可用。`icon` 应与扩展 `manifest.json` 的 `icon` 一致——建议直接把扩展的 `.svg` 图标文件内容粘进来（或用同一 emoji）。
 
 字段说明：
 
 | 字段 | 说明 |
 |---|---|
 | `id` | 必须与 zip 内 `manifest.json` 的 `id` 一致；kebab-case；全局唯一（查重见下） |
-| `name` / `version` / `description` / `author` | 展示用；`version` 与 Release tag 一致 |
+| `name` / `version` / `description` / `author` | 展示用；`version` 与 Release tag 一致。`name`/`description` 可以是纯字符串（所有语言回退）或 `{ "zh": "...", "en": "..." }` 多语言对象，应用按当前 locale 解析（回退：当前 locale → zh → en → 第一个可用） |
 | `tier` | `sandbox`（独立 origin iframe，受限）或 `trusted`（主进程，全宿主能力，安装后需用户在应用内点「批准」授权 TOFU） |
-| `icon` | inline SVG 文本 / emoji / 宿主 ThemeIcon 名（与 `manifest.icon` 同语义） |
+| `icon` | 应与扩展 `manifest.json` 的 `icon` **一致**：inline SVG 文本（把扩展的 `.svg` 文件内容粘进来）或 emoji。已装扩展会从本地读 SVG，商店从 catalog 渲染——两边一致才能在商店和已装列表显示同一图标 |
 | `downloadUrl` | 你仓库的 Release asset 直链，host 必须 `github.com` |
 
 提交 PR，描述扩展功能、声明的权限、为什么这个 tier。
@@ -92,6 +94,8 @@ PR 合并前逐项确认：
 - [ ] **tier 合理**：能用 `sandbox` 就别 `trusted`。`trusted` 拥有主进程全能力（读写 vault、调 Tauri 命令、访问所有 React state）——仅对确需深度集成的扩展放行
 - [ ] **权限最小**：`permissions.fs`/`http`/`vault` 等按需声明，origin 白名单不含通配；`contributes` 声明与功能匹配
 - [ ] **zip 干净**：无 `src/`、`*.ts`、`package*.json`、`node_modules`；无符号链接；体积在限制内（单文件 ≤50 MB / 总量 ≤100 MB / ≤1000 条目）
+- [ ] **icon 与 manifest 一致**：catalog 的 `icon` 应与扩展 `manifest.json` 的 `icon` 同源（同一 inline SVG 或同一 emoji），否则商店与已装列表显示不同图标
+- [ ] **多语言**：`name`/`description` 至少提供用户可能用到的语言；纯字符串作为所有语言回退也可
 - [ ] **签名**（可选）：若带 `signature` + `publisherPublicKey`，验证签名匹配（`verify_extension_signature`）；缺失则靠 SHA-256 integrity 兜底，MVP 不强制
 - [ ] **本地试装**：在应用「已安装」页用「从 .zip 安装」选该 zip 跑一遍，确认能装、能激活、贡献点正常注册
 
