@@ -20,7 +20,7 @@ Empaqueta en un zip los **contenidos** de `dist/` (no la carpeta `dist` en sí),
 
 ```sh
 cd path/to/your-extension/dist
-zip -r -X <id>-<version>.zip . -x "*.DS_Store"
+zip -r -X <id>-<version>.zip . -x "*.DS_Store" "*.map"
 ```
 
 Verifica:
@@ -30,6 +30,7 @@ unzip -l <id>-<version>.zip | head   # manifest.json debe estar en la raíz, sin
 
 **Restricciones de contenido del zip** (impuestas por `extract_zip_filtered` durante la instalación en Folyn; las infracciones provocan el rechazo directo de la instalación):
 - ❌ Código fuente: `src/`, `*.ts`
+- ❌ Source maps: `*.map` (vite/webpack los emite; filtran rutas de origen y se rechazan)
 - ❌ Archivos de configuración/bloqueo: `package.json`, `package-lock.json`, `pnpm-lock.yaml`, `tsconfig.json`, etc.
 - ❌ `node_modules/`
 - ❌ Enlaces simbólicos, rutas absolutas, rutas con `..` (protección zip-slip)

@@ -20,7 +20,7 @@ Zip the **contents** of `dist/` (not the `dist` folder itself) so that `manifest
 
 ```sh
 cd path/to/your-extension/dist
-zip -r -X <id>-<version>.zip . -x "*.DS_Store"
+zip -r -X <id>-<version>.zip . -x "*.DS_Store" "*.map"
 ```
 
 Verify:
@@ -30,6 +30,7 @@ unzip -l <id>-<version>.zip | head   # manifest.json must be at the root, with n
 
 **Zip content constraints** (enforced at install time by Folyn's `extract_zip_filtered`; violations are rejected outright):
 - ❌ Source code: `src/`, `*.ts`
+- ❌ Source maps: `*.map` (vite/webpack emit them; they leak source paths and are hard-rejected)
 - ❌ Config/lockfiles: `package.json`, `package-lock.json`, `pnpm-lock.yaml`, `tsconfig.json`, etc.
 - ❌ `node_modules/`
 - ❌ Symlinks, absolute paths, and `..` paths (zip-slip protection)

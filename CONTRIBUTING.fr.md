@@ -20,7 +20,7 @@ Compressez le **contenu** de `dist/` (pas le dossier `dist` lui-même) de sorte 
 
 ```sh
 cd path/to/your-extension/dist
-zip -r -X <id>-<version>.zip . -x "*.DS_Store"
+zip -r -X <id>-<version>.zip . -x "*.DS_Store" "*.map"
 ```
 
 Vérifiez :
@@ -30,6 +30,7 @@ unzip -l <id>-<version>.zip | head   # manifest.json must be at the root, with n
 
 **Contraintes sur le contenu du zip** (appliquées lors de l'installation par `extract_zip_filtered` de Folyn ; les violations sont purement et simplement rejetées) :
 - ❌ Code source : `src/`, `*.ts`
+- ❌ Source maps : `*.map` (émis par vite/webpack ; ils fuient les chemins source et sont rejetés)
 - ❌ Fichiers de configuration/lockfiles : `package.json`, `package-lock.json`, `pnpm-lock.yaml`, `tsconfig.json`, etc.
 - ❌ `node_modules/`
 - ❌ Liens symboliques, chemins absolus et chemins `..` (protection zip-slip)

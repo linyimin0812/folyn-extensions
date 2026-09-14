@@ -20,7 +20,7 @@ Packe den **Inhalt** von `dist/` (nicht den `dist`-Ordner selbst) in ein zip, so
 
 ```sh
 cd path/to/your-extension/dist
-zip -r -X <id>-<version>.zip . -x "*.DS_Store"
+zip -r -X <id>-<version>.zip . -x "*.DS_Store" "*.map"
 ```
 
 Prüfung:
@@ -30,6 +30,7 @@ unzip -l <id>-<version>.zip | head   # manifest.json muss im Stamm liegen, ohne 
 
 **zip-Inhalts-Beschränkungen** (werden bei der Folyn-Installation von `extract_zip_filtered` erzwungen; bei Verstößen wird die Installation direkt abgelehnt):
 - ❌ Quellcode: `src/`, `*.ts`
+- ❌ Source Maps: `*.map` (vite/webpack gibt sie aus; sie leaken Quellpfade und werden hart abgewiesen)
 - ❌ Konfigurations-/Lock-Dateien: `package.json`, `package-lock.json`, `pnpm-lock.yaml`, `tsconfig.json` usw.
 - ❌ `node_modules/`
 - ❌ Symlinks, absolute Pfade, `..`-Pfade (zip-slip-Schutz)

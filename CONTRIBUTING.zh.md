@@ -20,7 +20,7 @@
 
 ```sh
 cd path/to/your-extension/dist
-zip -r -X <id>-<version>.zip . -x "*.DS_Store"
+zip -r -X <id>-<version>.zip . -x "*.DS_Store" "*.map"
 ```
 
 验证：
@@ -30,6 +30,7 @@ unzip -l <id>-<version>.zip | head   # manifest.json 必须在根，无目录前
 
 **zip 内容约束**（Folyn 安装时由 `extract_zip_filtered` 强制，违规直接拒绝安装）：
 - ❌ 源码：`src/`、`*.ts`
+- ❌ source map：`*.map`（vite/webpack 产物，会泄露源码路径，安装时硬拒绝）
 - ❌ 配置/锁文件：`package.json`、`package-lock.json`、`pnpm-lock.yaml`、`tsconfig.json` 等
 - ❌ `node_modules/`
 - ❌ 符号链接、绝对路径、`..` 路径（zip-slip 防护）
