@@ -1,41 +1,43 @@
-# 贡献扩展到 Folyn 商店
+[English](CONTRIBUTING.md) | [简体中文](CONTRIBUTING.zh.md) | [日本語](CONTRIBUTING.ja.md) | [Français](CONTRIBUTING.fr.md) | [Deutsch](CONTRIBUTING.de.md) | [Español](CONTRIBUTING.es.md)
 
-本仓库是 [Folyn](https://github.com/linyimin0812/folyn) 扩展商店的**中央目录**。根目录的 `catalog.json` 列出所有可安装的扩展；每个扩展的 zip 包托管在**发布者自己的 GitHub 仓库**的 Releases 上，Folyn 应用从本目录拉取列表、从发布者仓库下载安装。
+# Contributing extensions to the Folyn store
 
-任何第三方都能贡献扩展：把你的扩展打成 zip、发到你自己的 GitHub Release、向本仓库提 PR 在 `catalog.json` 加一条。维护者审核 manifest / 权限 / tier 后合并，所有用户即在商店可见。
+This repository is the **central catalog** for the [Folyn](https://github.com/linyimin0812/folyn) extension store. The `catalog.json` at the repository root lists all installable extensions; each extension's zip is hosted on the **publisher's own GitHub repository** Releases. The Folyn app pulls the list from this catalog and downloads each extension from the publisher's repository for installation.
+
+Any third party can contribute an extension: package your extension as a zip, attach it to your own GitHub Release, and open a PR against this repository adding an entry to `catalog.json`. Maintainers review the manifest / permissions / tier and merge it, after which the extension becomes visible in the store to all users.
 
 ---
 
-## 发布流程（第三方）
+## Publishing process (third party)
 
-### 1. 构建扩展
+### 1. Build the extension
 
-按 [Folyn 扩展开发文档](https://github.com/linyimin0812/folyn/blob/main/docs/extension-store.md) 开发扩展，产出 `dist/` 目录。`dist/` 的**根**必须含 `manifest.json`（Folyn 安装时从 zip 根读 manifest）。
+Develop your extension following the [Folyn extension development docs](https://github.com/linyimin0812/folyn/blob/main/docs/extension-store.md), producing a `dist/` directory. The **root** of `dist/` must contain `manifest.json` (Folyn reads the manifest from the zip root during installation).
 
-### 2. 打 zip
+### 2. Zip it up
 
-把 `dist/` 的**内容**（不是 `dist` 文件夹本身）打成 zip，保证 `manifest.json` 在 zip 根：
+Zip the **contents** of `dist/` (not the `dist` folder itself) so that `manifest.json` ends up at the zip root:
 
 ```sh
 cd path/to/your-extension/dist
 zip -r -X <id>-<version>.zip . -x "*.DS_Store"
 ```
 
-验证：
+Verify:
 ```sh
-unzip -l <id>-<version>.zip | head   # manifest.json 必须在根，无目录前缀
+unzip -l <id>-<version>.zip | head   # manifest.json must be at the root, with no directory prefix
 ```
 
-**zip 内容约束**（Folyn 安装时由 `extract_zip_filtered` 强制，违规直接拒绝安装）：
-- ❌ 源码：`src/`、`*.ts`
-- ❌ 配置/锁文件：`package.json`、`package-lock.json`、`pnpm-lock.yaml`、`tsconfig.json` 等
+**Zip content constraints** (enforced at install time by Folyn's `extract_zip_filtered`; violations are rejected outright):
+- ❌ Source code: `src/`, `*.ts`
+- ❌ Config/lockfiles: `package.json`, `package-lock.json`, `pnpm-lock.yaml`, `tsconfig.json`, etc.
 - ❌ `node_modules/`
-- ❌ 符号链接、绝对路径、`..` 路径（zip-slip 防护）
-- ⚠️ 单文件 > 50 MB、总计 > 100 MB、> 1000 条目会被拒
+- ❌ Symlinks, absolute paths, and `..` paths (zip-slip protection)
+- ⚠️ A single file > 50 MB, a total > 100 MB, or more than 1000 entries will be rejected
 
-### 3. 发 GitHub Release
+### 3. Create a GitHub Release
 
-在你的扩展仓库创建 tag `<id>-<version>`（如 `my-ext-0.2.0`），上传 zip 作为 Release asset：
+Create a tag `<id>-<version>` (e.g. `my-ext-0.2.0`) in your extension repository and upload the zip as a Release asset:
 
 ```sh
 gh release create <id>-<version> <id>-<version>.zip \
@@ -43,16 +45,16 @@ gh release create <id>-<version> <id>-<version>.zip \
   --title "<id> <version>"
 ```
 
-记录 asset 的下载直链，形如：
+Record the asset's direct download URL, which will look like:
 ```
 https://github.com/<your-github-username>/<your-extension-repo>/releases/download/<id>-<version>/<id>-<version>.zip
 ```
 
-> ⚠️ 下载 URL 的 host **必须是 `github.com`**。Folyn 的 `install_extension_from_url` 命令只允许 `github.com`（SSRF 防护），其它 host 会被拒。Release asset 会 302 跳转到 `objects.githubusercontent.com`，已由下载器自动跟随，无需处理。
+> ⚠️ The download URL's host **must be `github.com`**. Folyn's `install_extension_from_url` command only allows `github.com` (SSRF protection); any other host is rejected. Release assets 302-redirect to `objects.githubusercontent.com`, which the downloader follows automatically — no handling needed on your side.
 
-### 4. 提 PR 到本目录
+### 4. Open a PR to this catalog
 
-Fork 本仓库，编辑 `catalog.json`，在 `extensions` 数组末尾加一条：
+Fork this repository, edit `catalog.json`, and append an entry to the `extensions` array:
 
 ```json
 {
@@ -67,46 +69,46 @@ Fork 本仓库，编辑 `catalog.json`，在 `extensions` 数组末尾加一条�
 }
 ```
 
-> `name`/`description` 也可写成纯字符串（如 `"name": "DBML"`），此时所有语言都显示该字符串。多语言对象则按用户当前语言渲染，缺失时回退 zh → en → 第一个可用。`icon` 应与扩展 `manifest.json` 的 `icon` 一致——建议直接把扩展的 `.svg` 图标文件内容粘进来（或用同一 emoji）。
+> `name`/`description` may also be plain strings (e.g. `"name": "DBML"`), in which case that string is shown for all languages. A multilingual object is rendered according to the user's current language, falling back zh → en → the first available. The `icon` should match the extension's `manifest.json` `icon` — the easiest approach is to paste in your extension's `.svg` icon file content directly (or use the same emoji).
 
-字段说明：
+Field reference:
 
-| 字段 | 说明 |
+| Field | Description |
 |---|---|
-| `id` | 必须与 zip 内 `manifest.json` 的 `id` 一致；kebab-case；全局唯一（查重见下） |
-| `name` / `version` / `description` / `author` | 展示用；`version` 与 Release tag 一致。`name`/`description` 可以是纯字符串（所有语言回退）或 `{ "zh": "...", "en": "..." }` 多语言对象，应用按当前 locale 解析（回退：当前 locale → zh → en → 第一个可用） |
-| `tier` | `sandbox`（独立 origin iframe，受限）或 `trusted`（主进程，全宿主能力，安装后需用户在应用内点「批准」授权 TOFU） |
-| `icon` | 应与扩展 `manifest.json` 的 `icon` **一致**：inline SVG 文本（把扩展的 `.svg` 文件内容粘进来）或 emoji。已装扩展会从本地读 SVG，商店从 catalog 渲染——两边一致才能在商店和已装列表显示同一图标 |
-| `downloadUrl` | 你仓库的 Release asset 直链，host 必须 `github.com` |
+| `id` | Must match the `id` in the zip's `manifest.json`; kebab-case; globally unique (see deduplication below) |
+| `name` / `version` / `description` / `author` | Display fields; `version` must match the Release tag. `name`/`description` may be a plain string (used as fallback for all languages) or a multilingual object `{ "zh": "...", "en": "..." }`, which the app resolves against the current locale (fallback: current locale → zh → en → first available) |
+| `tier` | `sandbox` (isolated origin iframe, restricted) or `trusted` (main process, full host capabilities; after install the user must tap "Approve" in-app to grant TOFU authorization) |
+| `icon` | Should **match** the extension's `manifest.json` `icon`: inline SVG text (paste your extension's `.svg` file content) or an emoji. Installed extensions read the SVG from local storage, while the store renders it from the catalog — both sides must agree so the store and the installed list show the same icon |
+| `downloadUrl` | Direct link to the Release asset in your repository; the host must be `github.com` |
 
-提交 PR，描述扩展功能、声明的权限、为什么这个 tier。
-
----
-
-## 维护者审核 checklist
-
-PR 合并前逐项确认：
-
-- [ ] **id 唯一**：`catalog.json` 内无重复 `id`，且不与官方扩展（`folyn-rich-text` / `folyn-dbml` / `folyn-file-viewer`）冲突
-- [ ] **id 合法**：`manifest.json` 的 `id` 与 catalog 条目 `id` 一致；kebab-case，无 `.` / `/` / `\`（`is_valid_extension_id`）
-- [ ] **downloadUrl**：host 是 `github.com`；tag/asset 名与条目 `version` 一致；`curl -sIL` 返回 200 + `content-type: application/zip`
-- [ ] **manifest 合法**：`manifest.json` 在 zip 根；`id`/`name`/`version`/`tier`/`main` 齐全；`validate_manifest` 通过
-- [ ] **tier 合理**：能用 `sandbox` 就别 `trusted`。`trusted` 拥有主进程全能力（读写 vault、调 Tauri 命令、访问所有 React state）——仅对确需深度集成的扩展放行
-- [ ] **权限最小**：`permissions.fs`/`http`/`vault` 等按需声明，origin 白名单不含通配；`contributes` 声明与功能匹配
-- [ ] **zip 干净**：无 `src/`、`*.ts`、`package*.json`、`node_modules`；无符号链接；体积在限制内（单文件 ≤50 MB / 总量 ≤100 MB / ≤1000 条目）
-- [ ] **icon 与 manifest 一致**：catalog 的 `icon` 应与扩展 `manifest.json` 的 `icon` 同源（同一 inline SVG 或同一 emoji），否则商店与已装列表显示不同图标
-- [ ] **多语言**：`name`/`description` 至少提供用户可能用到的语言；纯字符串作为所有语言回退也可
-- [ ] **签名**（可选）：若带 `signature` + `publisherPublicKey`，验证签名匹配（`verify_extension_signature`）；缺失则靠 SHA-256 integrity 兜底，MVP 不强制
-- [ ] **本地试装**：在应用「已安装」页用「从 .zip 安装」选该 zip 跑一遍，确认能装、能激活、贡献点正常注册
-
-审核通过后合并 PR。用户下次打开商店（或点「刷新」）即看到新扩展。
+Submit the PR, describing the extension's functionality, the declared permissions, and the rationale for the chosen tier.
 
 ---
 
-## 更新已发布的扩展
+## Maintainer review checklist
 
-发新版本 = 在你仓库发新 tag `<id>-<new-version>` + 上传新 zip asset，再向本仓库提 PR 更新 `catalog.json` 里该条的 `version` 与 `downloadUrl`。Folyn MVP 不做版本比对更新提示——已装用户需在「已安装」页卸载后重装，或直接覆盖安装（`install_extension_zip` 是 wipe + new，覆盖即可）。
+Confirm each item before merging the PR:
 
-## 下架
+- [ ] **id is unique**: no duplicate `id` in `catalog.json`, and no conflict with the official extensions (`folyn-rich-text` / `folyn-dbml` / `folyn-file-viewer`)
+- [ ] **id is valid**: the `manifest.json` `id` matches the catalog entry's `id`; kebab-case, with no `.` / `/` / `\` (`is_valid_extension_id`)
+- [ ] **downloadUrl**: host is `github.com`; the tag/asset name matches the entry's `version`; `curl -sIL` returns 200 + `content-type: application/zip`
+- [ ] **manifest is valid**: `manifest.json` is at the zip root; `id`/`name`/`version`/`tier`/`main` are all present; `validate_manifest` passes
+- [ ] **tier is reasonable**: prefer `sandbox` over `trusted` where possible. `trusted` grants full main-process capabilities (read/write the vault, invoke Tauri commands, access all React state) — reserve it for extensions that genuinely require deep integration
+- [ ] **least privilege**: `permissions.fs`/`http`/`vault` etc. are declared as needed; the origin allowlist contains no wildcards; `contributes` declarations match the functionality
+- [ ] **zip is clean**: no `src/`, `*.ts`, `package*.json`, or `node_modules`; no symlinks; size within limits (single file ≤ 50 MB / total ≤ 100 MB / ≤ 1000 entries)
+- [ ] **icon matches the manifest**: the catalog's `icon` should share the same source as the extension's `manifest.json` `icon` (the same inline SVG or the same emoji), otherwise the store and the installed list will display different icons
+- [ ] **multilingual**: `name`/`description` are provided in at least the languages users are likely to use; a plain string as a fallback for all languages is also acceptable
+- [ ] **signature** (optional): if `signature` + `publisherPublicKey` are present, verify the signature matches (`verify_extension_signature`); if absent, fall back to SHA-256 integrity — not enforced in the MVP
+- [ ] **local install test**: on the app's "Installed" page, use "Install from .zip" to select the zip and run through it once, confirming it installs, activates, and registers its contribution points correctly
 
-从 `catalog.json` 删条目即可。已安装的扩展不受影响（本地 `extensions.json` 与 `~/.folyn/extensions/<id>/` 仍保留，用户可手动卸载）。
+Once the review passes, merge the PR. Users will see the new extension the next time they open the store (or tap "Refresh").
+
+---
+
+## Updating a published extension
+
+Releasing a new version = create a new tag `<id>-<new-version>` in your repository, upload the new zip asset, then open a PR against this repository updating that entry's `version` and `downloadUrl` in `catalog.json`. The Folyn MVP does not do version-comparison update prompts — installed users must either uninstall and reinstall from the "Installed" page, or install over the existing one (`install_extension_zip` is wipe + new, so overwriting is fine).
+
+## Delisting
+
+Simply remove the entry from `catalog.json`. Installed extensions are unaffected (the local `extensions.json` and `~/.folyn/extensions/<id>/` are retained; the user can manually uninstall).
