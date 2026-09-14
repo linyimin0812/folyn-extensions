@@ -1,0 +1,35 @@
+{
+  "$schema": "reference catalog for the Folyn extension store (see docs/extension-store.md). Copy this file to the root of the linyimin0812/folyn-extensions repo and edit per release.",
+  "extensions": [
+    {
+      "id": "folyn-rich-text",
+      "name": "Rich Text",
+      "version": "0.1.0",
+      "description": "富文本编辑器：ProseMirror 编辑器 + HTML 导出",
+      "tier": "trusted",
+      "author": "Folyn",
+      "icon": "📝",
+      "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/folyn-rich-text-0.1.0/folyn-rich-text-0.1.0.zip"
+    },
+    {
+      "id": "folyn-dbml",
+      "name": "DBML",
+      "version": "0.1.0",
+      "description": "DBML 数据库建模：CodeMirror 编辑 + ER 图实时预览",
+      "tier": "trusted",
+      "author": "Folyn",
+      "icon": "🗄️",
+      "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/folyn-dbml-0.1.0/folyn-dbml-0.1.0.zip"
+    },
+    {
+      "id": "folyn-file-viewer",
+      "name": "File Viewer",
+      "version": "0.1.0",
+      "description": "通用文件查看器（Office / PDF / CAD / 归档 / 媒体等），兜底 FileType 扩展",
+      "tier": "trusted",
+      "author": "Folyn",
+      "icon": "📄",
+      "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/folyn-file-viewer-0.1.0/folyn-file-viewer-0.1.0.zip"
+    }
+  ]
+}
