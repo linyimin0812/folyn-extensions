@@ -5,12 +5,20 @@
       "id": "folyn-rich-text",
       "name": {
         "zh": "富文本",
-        "en": "Rich Text"
+        "en": "Rich Text",
+        "ja": "リッチテキスト",
+        "fr": "Texte enrichi",
+        "de": "Rich-Text",
+        "es": "Texto enriquecido"
       },
       "version": "0.1.0",
       "description": {
         "zh": "富文本编辑器：ProseMirror 编辑器 + HTML 导出",
-        "en": "Rich text editor: ProseMirror editor + HTML export"
+        "en": "Rich text editor: ProseMirror editor + HTML export",
+        "ja": "リッチテキストエディタ：ProseMirror エディタ + HTML エクスポート",
+        "fr": "Éditeur de texte enrichi : éditeur ProseMirror + export HTML",
+        "de": "Rich-Text-Editor: ProseMirror-Editor + HTML-Export",
+        "es": "Editor de texto enriquecido: editor ProseMirror + exportación HTML"
       },
       "tier": "trusted",
       "author": "Folyn",
@@ -23,7 +31,11 @@
       "version": "0.1.0",
       "description": {
         "zh": "DBML 数据库建模：CodeMirror 编辑 + ER 图实时预览",
-        "en": "DBML database modeling: CodeMirror editor + live ER diagram preview"
+        "en": "DBML database modeling: CodeMirror editor + live ER diagram preview",
+        "ja": "DBML データベースモデリング：CodeMirror エディタ + ER 図リアルタイムプレビュー",
+        "fr": "Modélisation de base de données DBML : éditeur CodeMirror + aperçu en direct du diagramme ER",
+        "de": "DBML-Datenbankmodellierung: CodeMirror-Editor + Live-ER-Diagramm-Vorschau",
+        "es": "Modelado de bases de datos DBML: editor CodeMirror + vista previa en vivo del diagrama ER"
       },
       "tier": "trusted",
       "author": "Folyn",
@@ -34,12 +46,20 @@
       "id": "folyn-file-viewer",
       "name": {
         "zh": "文件查看器",
-        "en": "File Viewer"
+        "en": "File Viewer",
+        "ja": "ファイルビューアー",
+        "fr": "Visionneuse de fichiers",
+        "de": "Dateibetrachter",
+        "es": "Visor de archivos"
       },
       "version": "0.1.0",
       "description": {
         "zh": "通用文件查看器（Office / PDF / CAD / 归档 / 媒体等），兜底 FileType 扩展",
-        "en": "Universal file viewer (Office / PDF / CAD / archive / media), fallback FileType extension"
+        "en": "Universal file viewer (Office / PDF / CAD / archive / media), fallback FileType extension",
+        "ja": "汎用ファイルビューアー（Office / PDF / CAD / アーカイブ / メディア等）、フォールバック FileType 拡張",
+        "fr": "Visionneuse de fichiers universelle (Office / PDF / CAD / archives / médias), extension FileType de repli",
+        "de": "Universeller Dateibetrachter (Office / PDF / CAD / Archiv / Medien), Fallback-FileType-Erweiterung",
+        "es": "Visor de archivos universal (Office / PDF / CAD / archivo / medios), extensión FileType de respaldo"
       },
       "tier": "trusted",
       "author": "Folyn",
