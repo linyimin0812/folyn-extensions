@@ -90,6 +90,30 @@
       "icon": "C",
       "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/0.0.1/folyn-carousel-0.1.0.zip",
       "contributesContainers": 2
+    },
+    {
+      "id": "github-jsdelivr",
+      "name": {
+        "zh": "GitHub + jsDelivr",
+        "en": "GitHub + jsDelivr",
+        "ja": "GitHub + jsDelivr",
+        "fr": "GitHub + jsDelivr",
+        "de": "GitHub + jsDelivr",
+        "es": "GitHub + jsDelivr"
+      },
+      "version": "0.1.0",
+      "description": {
+        "zh": "图床 + HTML 分享：上传图片走 jsDelivr CDN（需公开仓库），上传的 HTML 走 GitHub Pages（需在仓库 Settings → Pages 开启）。需提供 GitHub 账户、仓库、分支与 Personal Access Token（repo 权限）。",
+        "en": "Image hosting + HTML sharing: images upload via jsDelivr CDN (public repo required), HTML uploads via GitHub Pages (enable in repo Settings → Pages). Requires GitHub owner, repo, branch, and a PAT with repo scope.",
+        "ja": "画像ホスト + HTML 共有：画像は jsDelivr CDN 経由（公開リポジトリが必要）、HTML は GitHub Pages 経由（リポジトリの Settings → Pages で有効化）。GitHub の owner・repo・branch・PAT（repo 権限）が必要です。",
+        "fr": "Hébergement d'images + partage HTML : images via CDN jsDelivr (dépôt public requis), HTML via GitHub Pages (activer dans Settings → Pages du dépôt). Requiert owner, repo, branch GitHub et un PAT avec scope repo.",
+        "de": "Bild-Hosting + HTML-Sharing: Bilder via jsDelivr CDN (öffentliches Repo nötig), HTML via GitHub Pages (in Repo Settings → Pages aktivieren). Benötigt GitHub owner/repo/branch und ein PAT mit repo-Scope.",
+        "es": "Alojamiento de imágenes + compartir HTML: imágenes vía jsDelivr CDN (repo público requerido), HTML vía GitHub Pages (activar en Settings → Pages del repo). Requiere owner, repo, branch de GitHub y un PAT con scope repo."
+      },
+      "tier": "trusted",
+      "author": "Folyn",
+      "icon": "github",
+      "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/0.0.2/github-jsdelivr-0.1.0.zip"
     }
   ]
 }
