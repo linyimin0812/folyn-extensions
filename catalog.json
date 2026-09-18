@@ -114,6 +114,30 @@
       "author": "Folyn",
       "icon": "github",
       "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/0.0.2/github-jsdelivr-0.1.0.zip"
+    },
+    {
+      "id": "diff-viewer",
+      "name": {
+        "zh": "差异对比",
+        "en": "Diff Viewer",
+        "ja": "差分ビューアー",
+        "fr": "Visionneuse de différences",
+        "de": "Diff-Betrachter",
+        "es": "Visor de diferencias"
+      },
+      "version": "0.1.0",
+      "description": {
+        "zh": "两栏内容对比，逐词高亮差异",
+        "en": "Side-by-side content comparison with word-level diff highlighting",
+        "ja": "2 列の内容比較、単語レベルの差分ハイライト",
+        "fr": "Comparaison de contenu en deux colonnes, surlignage des différences mot à mot",
+        "de": "Inhaltsvergleich in zwei Spalten mit wortgenauer Diff-Hervorhebung",
+        "es": "Comparación de contenido en dos columnas con resaltado de diferencias palabra por palabra"
+      },
+      "tier": "sandbox",
+      "author": "yiminlin",
+      "icon": "🆚",
+      "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/0.0.3/diff-viewer-0.1.0.zip"
     }
   ]
 }
