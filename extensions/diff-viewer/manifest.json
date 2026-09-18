@@ -1,0 +1,42 @@
+{
+  "id": "diff-viewer",
+  "name": "Diff Viewer",
+  "version": "0.1.0",
+  "author": "yiminlin",
+  "folyn": ">=0.1.0",
+  "tier": "sandbox",
+  "main": "index.js",
+  "html": "index.html",
+  "icon": "🆚",
+  "description": "两栏内容对比，逐词高亮差异",
+  "permissions": {
+    "fs": { "scope": [] },
+    "http": { "origins": [] },
+    "clipboard": false,
+    "dialog": false,
+    "window": false,
+    "vault": { "readActive": false, "insertContent": false },
+    "ai": { "chat": false, "agents": [], "edit": false }
+  },
+  "contributes": {
+    "commands": [],
+    "fileTypes": [],
+    "containers": [],
+    "features": [],
+    "tools": [
+      {
+        "id": "diff-viewer",
+        "title": "Diff Viewer",
+        "icon": "🆚",
+        "window": true,
+        "entry": "index.html"
+      }
+    ],
+    "exporters": [],
+    "fileTemplates": [],
+    "keybindings": [],
+    "exportEnhancers": [],
+    "markdownCodeRenderers": [],
+    "editorLanguages": []
+  }
+}
