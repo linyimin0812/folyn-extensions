@@ -138,6 +138,30 @@
       "author": "yiminlin",
       "icon": "<svg viewBox=\"0 0 1024 1024\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M513.19 32a31.826 31.826 0 0 0-29.788 33.978v892.044A31.94 31.94 0 0 0 513.642 992c18.688 0 30.241-13.025 30.241-33.978V65.978A33.978 33.978 0 0 0 513.189 32z m347.37 107.598H619.316a31.147 31.147 0 1 0 0 62.293h210.099v22.653a31.147 31.147 0 0 0 61.727 0v-53.8a31.147 31.147 0 0 0-30.58-31.146z m0 619.764a31.147 31.147 0 0 0-31.146 31.487v34.997H632.227a31.147 31.147 0 0 0 0 62.294H860.56a31.147 31.147 0 0 0 30.58-31.487V790.85a31.147 31.147 0 0 0-30.58-31.487z m0-430.392a31.147 31.147 0 0 0-31.146 31.487v294.478a31.147 31.147 0 0 0 61.727 0V360.457a31.147 31.147 0 0 0-30.58-31.487zM404.12 201.891a31.147 31.147 0 1 0 0-62.293h-240.68a31.147 31.147 0 0 0-31.146 31.147v685.908a31.147 31.147 0 0 0 31.146 31.147h240.68a31.147 31.147 0 1 0 0-62.294H194.586V201.891z\" fill=\"#1296db\" stroke=\"#1296db\" stroke-width=\"32\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/></svg>",
       "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/0.0.4/diff-viewer-0.1.1.zip"
+    },
+    {
+      "id": "paste-history",
+      "name": {
+        "zh": "剪贴板历史",
+        "en": "Paste History",
+        "ja": "クリップボード履歴",
+        "fr": "Historique du presse-papiers",
+        "de": "Zwischenablage-Verlauf",
+        "es": "Historial del portapapeles"
+      },
+      "version": "0.1.0",
+      "description": {
+        "zh": "剪贴板历史管理：自动记录复制的文本与图片，双栏查看，一键复制回剪贴板",
+        "en": "Clipboard history: auto-captures copied text and images, two-pane viewer, copy back with one click",
+        "ja": "クリップボード履歴：コピーしたテキストと画像を自動記録、2ペイン表示、ワンクリックで再コピー",
+        "fr": "Historique du presse-papiers : capture automatique des textes et images copiés, vue double volet, recopie en un clic",
+        "de": "Zwischenablage-Verlauf: erfasst kopierte Texte und Bilder automatisch, Zwei-Spalten-Ansicht, mit einem Klick zurückkopieren",
+        "es": "Historial del portapapeles: captura automáticamente textos e imágenes copiados, vista de dos paneles, recopia con un clic"
+      },
+      "tier": "sandbox",
+      "author": "yiminlin",
+      "icon": "<svg viewBox=\"0 0 1024 1024\" xmlns=\"http://www.w3.org/2000/svg\"><path fill=\"#d4237a\" d=\"M426.666667 298.666667c-70.186667 0-128 57.813333-128 128v426.666666c0 70.186667 57.813333 128 128 128h426.666666c70.186667 0 128-57.813333 128-128V426.666667c0-70.186667-57.813333-128-128-128z m0 85.333333h426.666666c24.362667 0 42.666667 18.304 42.666667 42.666667v426.666666c0 24.362667-18.304 42.666667-42.666667 42.666667H426.666667c-24.362667 0-42.666667-18.304-42.666667-42.666667V426.666667c0-24.362667 18.304-42.666667 42.666667-42.666667z\"/><path fill=\"#d4237a\" d=\"M170.666667 42.666667C100.48 42.666667 42.666667 100.48 42.666667 170.666667v426.666666c0 70.186667 57.813333 128 128 128a42.666667 42.666667 0 0 0 42.666666-42.666666 42.666667 42.666667 0 0 0-42.666666-42.666667c-23.68 0-42.666667-18.986667-42.666667-42.666667V170.666667c0-23.68 18.986667-42.666667 42.666667-42.666667h426.666666c23.68 0 42.666667 18.986667 42.666667 42.666667a42.666667 42.666667 0 0 0 42.666667 42.666666 42.666667 42.666667 0 0 0 42.666666-42.666666c0-70.186667-57.813333-128-128-128z\"/></svg>",
+      "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/0.0.5/paste-history-0.1.0.zip"
     }
   ]
 }
