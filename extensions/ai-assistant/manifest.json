@@ -1,0 +1,51 @@
+{
+  "id": "ai-assistant",
+  "name": "AI 助手",
+  "version": "0.1.2",
+  "author": "yiminlin",
+  "folyn": ">=0.1.0",
+  "tier": "trusted",
+  "main": "dist/index.js",
+  "html": "",
+  "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z\"/><path d=\"m21.854 2.147-10.94 10.939\"/></svg>",
+  "description": "自定义 AI 聊天助手：左侧助手管理（增删改），右侧对话；支持活动栏面板与独立弹窗。",
+  "permissions": {
+    "fs": { "scope": [] },
+    "http": { "origins": [] },
+    "clipboard": false,
+    "dialog": true,
+    "window": true,
+    "vault": { "readActive": false, "insertContent": false },
+    "ai": { "chat": true, "agents": [], "edit": false }
+  },
+  "contributes": {
+    "commands": [],
+    "fileTypes": [],
+    "containers": [],
+    "features": [],
+    "pages": [
+      {
+        "id": "assistant-page",
+        "component": "assistant-page",
+        "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z\"/><path d=\"m21.854 2.147-10.94 10.939\"/></svg>",
+        "title": "AI 助手",
+        "order": 50
+      }
+    ],
+    "tools": [
+      {
+        "id": "chat-assistant",
+        "title": "AI 助手",
+        "icon": "💬",
+        "window": true,
+        "entry": "index.html"
+      }
+    ],
+    "exporters": [],
+    "fileTemplates": [],
+    "keybindings": [],
+    "exportEnhancers": [],
+    "markdownCodeRenderers": [],
+    "editorLanguages": []
+  }
+}
