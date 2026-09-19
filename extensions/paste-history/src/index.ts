@@ -37,7 +37,13 @@ const COPY_ACT_ICON =
 const TRASH_ACT_ICON =
   '<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="72" stroke-linecap="round" stroke-linejoin="round"><path d="M128 256h768M341.333 256v-85.333a42.667 42.667 0 0 1 42.667-42.667h256a42.667 42.667 0 0 1 42.667 42.667V256M213.333 256l36.99 548.44a85.333 85.333 0 0 0 85.141 80.893h353.072a85.333 85.333 0 0 0 85.141-80.893L810.667 256M426.667 469.333v298.667M597.333 469.333v298.667"/></svg>';
 
-const RPC_URL = 'folyn-extension://localhost/paste-history/rpc';
+// Relative RPC URL: resolves against this extension's own document URL on
+// every platform — `folyn-extension://localhost/paste-history/rpc` on
+// macOS/Linux, `http://folyn-extension.localhost/paste-history/rpc` on
+// Windows/WebView2 (where the host serves the scheme as that virtual host
+// and the raw `folyn-extension://` form is an unknown scheme — fetch()
+// would throw before ever reaching the host).
+const RPC_URL = 'rpc';
 const HISTORY_FILE = 'history.json';
 const POLL_MS = 1000;
 const SIDE_MIN = 120; // splitter clamp — keeps icon + preview + time readable

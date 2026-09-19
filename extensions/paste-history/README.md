@@ -50,7 +50,9 @@ from inside `dist/`.
 The extension runs in its own WebviewWindow served from the
 `folyn-extension://` scheme — no host DOM, no `window.React`, no Tauri APIs.
 Every host capability (clipboard read/write, fs) goes through the
-`fetch('folyn-extension://localhost/paste-history/rpc')` bridge and is
+relative `fetch('rpc')` bridge (resolves to the extension's own origin —
+`folyn-extension://localhost/…` on macOS/Linux,
+`http://folyn-extension.localhost/…` on Windows/WebView2) and is
 checked against `manifest.permissions` before it runs.
 
 Images render via `canvas` + `createImageBitmap` (in-process decode), because
