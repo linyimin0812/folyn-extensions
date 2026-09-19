@@ -13,6 +13,9 @@ type Part = { added?: boolean; removed?: boolean; value: string };
 
 const state = { left: '', right: '' };
 
+const ICON_SVG =
+  '<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path d="M513.19 32a31.826 31.826 0 0 0-29.788 33.978v892.044A31.94 31.94 0 0 0 513.642 992c18.688 0 30.241-13.025 30.241-33.978V65.978A33.978 33.978 0 0 0 513.189 32z m347.37 107.598H619.316a31.147 31.147 0 1 0 0 62.293h210.099v22.653a31.147 31.147 0 0 0 61.727 0v-53.8a31.147 31.147 0 0 0-30.58-31.146z m0 619.764a31.147 31.147 0 0 0-31.146 31.487v34.997H632.227a31.147 31.147 0 0 0 0 62.294H860.56a31.147 31.147 0 0 0 30.58-31.487V790.85a31.147 31.147 0 0 0-30.58-31.487z m0-430.392a31.147 31.147 0 0 0-31.146 31.487v294.478a31.147 31.147 0 0 0 61.727 0V360.457a31.147 31.147 0 0 0-30.58-31.487zM404.12 201.891a31.147 31.147 0 1 0 0-62.293h-240.68a31.147 31.147 0 0 0-31.146 31.147v685.908a31.147 31.147 0 0 0 31.146 31.147h240.68a31.147 31.147 0 1 0 0-62.294H194.586V201.891z" fill="#1296db" stroke="#1296db" stroke-width="32" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+
 function h<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   props: Partial<HTMLElementTagNameMap[K]> & { className?: string } = {},
@@ -104,6 +107,7 @@ function render(): void {
 
   app.append(
     h('header', {}, [
+      h('span', { className: 'icon', innerHTML: ICON_SVG }),
       h('h1', {}, ['Diff Viewer']),
       h('span', { className: 'spacer' }),
       stats,
