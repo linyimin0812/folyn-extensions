@@ -1,0 +1,42 @@
+{
+  "id": "paste-history",
+  "name": "Paste History",
+  "version": "0.1.0",
+  "author": "yiminlin",
+  "folyn": ">=0.1.0",
+  "tier": "sandbox",
+  "main": "index.js",
+  "html": "index.html",
+  "icon": "icon.svg",
+  "description": "剪贴板历史：自动记录复制内容，左栏查看文本/图片详情，右栏按时间倒序浏览，双击一键复制回剪贴板",
+  "permissions": {
+    "fs": { "scope": ["history.json"] },
+    "http": { "origins": [] },
+    "clipboard": true,
+    "dialog": false,
+    "window": false,
+    "vault": { "readActive": false, "insertContent": false },
+    "ai": { "chat": false, "agents": [], "edit": false }
+  },
+  "contributes": {
+    "commands": [],
+    "fileTypes": [],
+    "containers": [],
+    "features": [],
+    "tools": [
+      {
+        "id": "paste-history",
+        "title": "Paste History",
+        "icon": "📋",
+        "window": true,
+        "entry": "index.html"
+      }
+    ],
+    "exporters": [],
+    "fileTemplates": [],
+    "keybindings": [],
+    "exportEnhancers": [],
+    "markdownCodeRenderers": [],
+    "editorLanguages": []
+  }
+}
