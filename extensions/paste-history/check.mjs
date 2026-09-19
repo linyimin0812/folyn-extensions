@@ -7,6 +7,7 @@ import {
   MAX_IMAGE_B64,
   shouldCapture,
   isNoTextError,
+  isNoFileError,
   isUnknownMethodError,
   normalizeItem,
   trim,
@@ -29,6 +30,14 @@ assert.equal(isNoTextError(''), false);
 // isUnknownMethodError — older host without clipboard:read-image
 assert.equal(isUnknownMethodError('unknown RPC method: clipboard:read-image'), true);
 assert.equal(isUnknownMethodError('fs:read denied: path out of scope'), false);
+
+// isNoFileError — ENOENT from the host fs plugin means FIRST RUN, not a
+// load failure (the session may save; there is nothing on disk to lose)
+assert.equal(isNoFileError('No such file or directory (os error 2)'), true);
+assert.equal(isNoFileError('The system cannot find the file specified. (os error 2)'), true);
+assert.equal(isNoFileError('rpc timeout'), false, 'listener race timeout is a real failure');
+assert.equal(isNoFileError('fs:read denied: path out of scope'), false);
+assert.equal(isNoFileError('permission denied (os error 13)'), false, 'EACCES is a real failure, not first-run');
 
 // normalizeItem — history.json is a trust boundary: junk drops, valid passes
 assert.deepEqual(normalizeItem({ id: 'a', kind: 'text', ts: 5, text: 'hi' }), {

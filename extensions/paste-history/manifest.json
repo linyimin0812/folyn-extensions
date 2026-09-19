@@ -1,7 +1,7 @@
 {
   "id": "paste-history",
   "name": "Paste History",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "author": "yiminlin",
   "folyn": ">=0.1.0",
   "tier": "sandbox",

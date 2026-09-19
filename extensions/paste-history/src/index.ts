@@ -10,6 +10,11 @@
 // on the clipboard the host's change-count gate returns `{unchanged:true}`
 // instead of re-decoding/transferring the image (CPU). History persists to
 // history.json in the extension data dir via fs:write (debounced 400 ms).
+// Saves are BLOCKED until the session has successfully read history.json
+// (or confirmed it absent): a transient fs:read failure (e.g. this window
+// opened before the main window's RPC listener attached → rpc timeout)
+// must not silently wipe the persisted history — the failed load is
+// retried from the 1 s poll until it resolves.
 //
 // CSP note: sandbox pages carry `default-src 'none'` with no img-src, so
 // images must NOT go through <img src="data:…"> — they render via canvas +
@@ -20,6 +25,7 @@ import {
   type ImageItem,
   type Item,
   formatTime,
+  isNoFileError,
   isNoTextError,
   isUnknownMethodError,
   newId,
@@ -81,6 +87,10 @@ let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
 let clearArmed = false;
 let clearDisarm: ReturnType<typeof setTimeout> | undefined;
+let historyLoaded = false; // a read of history.json resolved this session (file present OR confirmed absent)
+let loadErrMsg: string | null = null; // persistent read failure — saves stay blocked to protect the file
+let loadRetryInFlight = false;
+let savePausedWarned = false; // one-time toast when a save is blocked by a failed load
 
 let listEl: HTMLElement;
 let viewerHeadEl: HTMLElement;
@@ -94,8 +104,29 @@ const rowById = new Map<string, HTMLElement>();
 // ---------- persistence ----------
 
 async function load(): Promise<void> {
+  let content: string;
   try {
-    const content = await rpc<string>('fs:read', { path: HISTORY_FILE });
+    content = await rpc<string>('fs:read', { path: HISTORY_FILE });
+  } catch (e) {
+    const msg = errMsg(e);
+    if (isNoFileError(msg)) {
+      historyLoaded = true; // first run — no file yet, nothing to lose
+      loadErrMsg = null;
+      return;
+    }
+    // Read failed (typical cause: this window opened before the MAIN
+    // window's RPC listener attached — the request never gets dispatched
+    // and times out). Start empty but keep saves BLOCKED: overwriting now
+    // would turn a transient read failure into permanent history loss.
+    // retryLoad (piggybacked on the 1 s poll) self-heals this in seconds.
+    loadErrMsg = msg;
+    return;
+  }
+  // Read OK — corrupt/unparseable content means rewrite allowed (nothing
+  // salvageable; bad entries drop, never throw).
+  historyLoaded = true;
+  loadErrMsg = null;
+  try {
     const parsed: unknown = JSON.parse(content);
     const o = parsed !== null && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
     if (o && o.v === 1 && Array.isArray(o.items)) {
@@ -104,7 +135,36 @@ async function load(): Promise<void> {
       if (typeof w === 'number' && w >= SIDE_MIN && w <= SIDE_MAX) sideWidth = w;
     }
   } catch {
-    // first run (no file yet) or unreadable → start empty; next save rewrites it
+    // unreadable → start empty; next save rewrites it
+  }
+}
+
+// Self-heal a failed load(): retried from every poll tick until the read
+// resolves (the common cause — tool opened before the main window's RPC
+// listener attached — clears within seconds). Captures that piled up while
+// saves were blocked are prepended (deduped) so nothing visible is lost.
+async function retryLoad(): Promise<void> {
+  if (loadErrMsg === null || loadRetryInFlight) return;
+  loadRetryInFlight = true;
+  try {
+    const unsaved = items;
+    await load();
+    if (loadErrMsg !== null) return; // still failing — the next poll retries
+    if (lastSeenText === null) {
+      // Same boot semantics as main(): don't re-capture the newest text on
+      // the first poll after recovery.
+      const newest = items[0];
+      lastSeenText = newest && newest.kind === 'text' ? newest.text : null;
+    }
+    const key = (it: Item) => (it.kind === 'text' ? `t:${it.text}` : `i:${it.data}`);
+    const loadedKeys = new Set(items.map(key));
+    items = trim([...unsaved.filter((it) => !loadedKeys.has(key(it))), ...items]);
+    if (unsaved.length > 0) scheduleSave(); // persist the recovered merge
+    if (selectedId === null) selectedId = items[0]?.id ?? null;
+    renderList();
+    renderViewer();
+  } finally {
+    loadRetryInFlight = false;
   }
 }
 
@@ -114,6 +174,15 @@ function scheduleSave(): void {
 }
 
 async function saveNow(): Promise<void> {
+  if (!historyLoaded) {
+    // Never overwrite history.json from a session that could not read it —
+    // a transient read failure must not become permanent data loss.
+    if (!savePausedWarned) {
+      savePausedWarned = true;
+      toast('历史文件读取失败，保存已暂停');
+    }
+    return;
+  }
   try {
     await rpc('fs:write', {
       path: HISTORY_FILE,
@@ -127,6 +196,7 @@ async function saveNow(): Promise<void> {
 // ---------- capture ----------
 
 async function poll(): Promise<void> {
+  void retryLoad(); // a failed startup load self-heals from the poll cadence
   let text: string | null;
   try {
     text = await rpc<string | null>('clipboard:read', {});
@@ -483,7 +553,12 @@ function renderList(): void {
   rowById.clear();
   listEl.textContent = '';
   if (items.length === 0) {
-    listEl.append(h('div', { className: 'empty' }, ['暂无记录']));
+    const empty = h('div', {
+      className: 'empty',
+      textContent: loadErrMsg !== null ? '历史加载失败，已暂停保存' : '暂无记录',
+    });
+    if (loadErrMsg !== null) empty.title = loadErrMsg; // full error on hover
+    listEl.append(empty);
   }
   for (const it of items) {
     const row = h('div', { className: 'item' });

@@ -45,6 +45,17 @@ export function isUnknownMethodError(msg: string): boolean {
   return msg.startsWith('unknown RPC method');
 }
 
+// std::io::Error (ENOENT) from the host's fs:read, as its Display string:
+// "No such file or directory (os error 2)" (macOS/Linux) or "The system
+// cannot find the file specified. (os error 2)" (Windows). A missing file
+// is FIRST RUN — not a load failure; the session may save freely, there is
+// nothing on disk to lose.
+// ponytail: string-match on the io error text — same rationale as
+// isNoTextError; the RPC bridge has no error codes.
+export function isNoFileError(msg: string): boolean {
+  return msg.includes('os error 2') || /no such file|cannot find the (file|path)/i.test(msg);
+}
+
 export function previewText(text: string): string {
   const firstLine = text.split('\n').find((l) => l.trim() !== '') ?? '';
   const s = firstLine.trim().replace(/\s+/g, ' ');
