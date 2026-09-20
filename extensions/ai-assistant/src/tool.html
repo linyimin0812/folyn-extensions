@@ -131,7 +131,8 @@
   .menu-item.on { background: var(--accdim); color: var(--acc); }
   .menu-item .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
   .menu-item .n { flex-shrink: 0; font-size: 10px; color: var(--t3); }
-  .pair-item { justify-content: flex-start; align-items: flex-start; gap: 6px; white-space: nowrap; }
+  .pair-item { align-items: flex-start; gap: 6px; white-space: nowrap; }
+  .pair-lines { flex: 1; min-width: 0; display: flex; flex-direction: column; text-align: left; }
   .pair-item .l1 { display: block; font-size: 12px; line-height: 1.25; font-weight: 600; color: var(--t1); }
   .pair-item .l2 { display: block; font-size: 11px; line-height: 1.25; margin-top: 2px; }
 
@@ -202,6 +203,7 @@
     font-size: 11px; color: var(--t2);
   }
   .attach-chip img { width: 28px; height: 28px; object-fit: cover; border-radius: 6px; flex-shrink: 0; }
+  .attach-chip .attach-doc { width: 28px; height: 28px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; color: var(--t3); }
   .attach-chip .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .attach-chip .x {
     width: 16px; height: 16px; flex-shrink: 0; display: inline-flex; align-items: center;
@@ -211,6 +213,12 @@
   .attach-chip .x:hover { background: var(--hov); color: var(--red); }
   .attach-imgs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
   .attach-imgs img { width: 56px; height: 56px; object-fit: cover; border-radius: 6px; flex-shrink: 0; }
+  .attach-doc-chip {
+    display: inline-flex; align-items: center; gap: 4px; max-width: 160px; padding: 2px 6px;
+    background: var(--panel); border: 1px solid var(--brd); border-radius: 6px;
+    font-size: 11px; color: var(--t2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .attach-doc-chip .attach-doc { color: var(--t3); flex-shrink: 0; display: inline-flex; }
 
   .input-card {
     display: flex; flex-direction: column; border: 1px solid var(--brd); border-radius: 12px;
@@ -313,7 +321,7 @@
               <button class="icon-btn" id="pairBtn" title="服务提供商 / 模型"></button>
               <div class="menu pair-menu" id="pairMenu" hidden></div>
             </div>
-            <button class="icon-btn" id="attachBtn" title="附加图片">
+            <button class="icon-btn" id="attachBtn" title="附加图片/文件">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" /></svg>
             </button>
             <div class="spacer"></div>

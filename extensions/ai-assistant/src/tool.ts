@@ -6,6 +6,14 @@
 // the host returns { jobId } and this script drains deltas with ai:chat-poll
 // (~150ms) — token streaming without postMessage.
 import { renderMarkdown } from './markdown';
+import {
+  ATTACH_ACCEPT,
+  DOC_SVG,
+  buildPrompt,
+  isTextFile,
+  readFiles,
+  type PendingAttachment,
+} from './attachments';
 
 // Relative RPC URL: resolves against this extension's own document URL on
 // every platform — `folyn-extension://localhost/ai-assistant/rpc` on
@@ -31,10 +39,9 @@ interface Msg {
   ts?: number;
   thinking?: string;
   pair?: Pair;
-  attachments?: { name: string; url: string }[];
+  attachments?: { name: string; url?: string }[];
 }
 interface Session { id: string; assistantId: string; title: string; ctx: number }
-interface PendingImage { id: string; name: string; mediaType: string; data: string }
 interface Pair { provider: string; model: string; label?: string; iconUrl?: string }
 
 const DEFAULT_ASSISTANT: Assistant = { id: 'default', name: '默认助手', prompt: '你是一个乐于助人的中文 AI 助手。', v: 1 };
@@ -128,7 +135,7 @@ let draft: Assistant | null = null;
 let busy = false;
 let pairs: Pair[] = [];
 let pair: Pair | null = null;
-let attachments: PendingImage[] = [];
+let attachments: PendingAttachment[] = [];
 let noticeTimer: number | undefined;
 /** Persistence gate — no writes before the async load has restored state. */
 let loaded = false;
@@ -370,11 +377,20 @@ function renderMessages(): void {
       if (m.attachments && m.attachments.length > 0) {
         const imgs = el('div', 'attach-imgs');
         for (const att of m.attachments) {
-          const img = el('img');
-          img.src = att.url;
-          img.alt = att.name;
-          img.title = att.name;
-          imgs.append(img);
+          if (att.url) {
+            const img = el('img');
+            img.src = att.url;
+            img.alt = att.name;
+            img.title = att.name;
+            imgs.append(img);
+          } else {
+            const chip = el('span', 'attach-doc-chip');
+            chip.title = att.name;
+            const doc = el('span', 'attach-doc');
+            doc.innerHTML = DOC_SVG;
+            chip.append(doc, el('span', '', att.name));
+            imgs.append(chip);
+          }
         }
         bubble.append(imgs);
       }
@@ -454,7 +470,7 @@ function renderPairMenu(): void {
     const iconWrap = el('span');
     iconWrap.style.marginTop = '1px';
     iconWrap.append(providerIcon(p, 14));
-    const lines = el('span');
+    const lines = el('span', 'pair-lines');
     lines.append(el('span', 'l1', p.label ?? p.provider), el('span', 'l2', p.model));
     row.append(iconWrap, lines);
     $pairMenu.append(row);
@@ -466,14 +482,21 @@ function renderAttachRow(): void {
   $attachRow.hidden = attachments.length === 0;
   for (const att of attachments) {
     const chip = el('div', 'attach-chip');
-    const img = el('img');
-    img.src = `data:${att.mediaType};base64,${att.data}`;
-    img.alt = att.name;
+    if (att.kind !== 'image') {
+      const doc = el('span', 'attach-doc');
+      doc.innerHTML = DOC_SVG;
+      chip.append(doc);
+    } else {
+      const img = el('img');
+      img.src = `data:${att.mediaType};base64,${att.data}`;
+      img.alt = att.name;
+      chip.append(img);
+    }
     const t = el('span', 't', att.name);
     const x = el('button', 'x', '×');
     x.title = '移除附件';
     x.onclick = () => { attachments = attachments.filter((a) => a.id !== att.id); renderAttachRow(); renderInputState(); };
-    chip.append(img, t, x);
+    chip.append(t, x);
     $attachRow.append(chip);
   }
 }
@@ -577,25 +600,21 @@ async function removeAssistant(id: string): Promise<void> {
 }
 
 // ── attachments ──
-const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
-function addImageFiles(files: File[]): void {
-  for (const f of files.filter((x) => x.type.startsWith('image/'))) {
-    if (f.size > MAX_IMAGE_BYTES) continue;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const url = String(reader.result ?? '');
-      const comma = url.indexOf(',');
-      if (comma < 0) return;
-      attachments = [...attachments, { id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, name: f.name, mediaType: f.type, data: url.slice(comma + 1) }];
-      renderAttachRow();
-      renderInputState();
-    };
-    reader.readAsDataURL(f);
+async function addFiles(files: File[]): Promise<void> {
+  const added = await readFiles(files);
+  if (added.length > 0) {
+    attachments = [...attachments, ...added];
+    renderAttachRow();
+    renderInputState();
+  } else if (files.length > 0) {
+    showToast('仅支持 ≤4MB 图片、≤256KB 文本或 ≤16MB PDF');
   }
 }
 $attachBtn.onclick = () => $fileInput.click();
+$attachBtn.title = '附加图片/文件';
+$fileInput.accept = ATTACH_ACCEPT;
 $fileInput.onchange = () => {
-  addImageFiles(Array.from($fileInput.files ?? []));
+  void addFiles(Array.from($fileInput.files ?? []));
   $fileInput.value = '';
 };
 
@@ -633,8 +652,11 @@ async function send(): Promise<void> {
   if (!text && attachments.length === 0) return;
   if (busy) return;
   $input.value = '';
-  const imgs = attachments;
+  const sent = attachments;
   attachments = [];
+  const imgs = sent.filter((x) => x.kind === 'image');
+  const pdfs = sent.filter((x) => x.kind === 'pdf');
+  const prompt = buildPrompt(text, sent.filter((x) => x.kind === 'text'));
   const prev = msgs[s.id] ?? [];
   const seeded = prev.some((m) => m.role === 'user');
   msgs = {
@@ -645,7 +667,7 @@ async function send(): Promise<void> {
         role: 'user',
         content: text,
         ts: Date.now(),
-        ...(imgs.length > 0 ? { attachments: imgs.map((i) => ({ name: i.name, url: `data:${i.mediaType};base64,${i.data}` })) } : {}),
+        ...(sent.length > 0 ? { attachments: sent.map((x) => (x.kind === 'image' ? { name: x.name, url: `data:${x.mediaType};base64,${x.data}` } : { name: x.name })) } : {}),
       },
       { role: 'assistant', content: '', pair: pair ?? undefined },
     ],
@@ -662,9 +684,16 @@ async function send(): Promise<void> {
     // text/thinking deltas onto the tail bubble every 150ms until done/error.
     const r = await rpc('ai:chat', {
       sessionId: `ai-assistant-${a.id}-${a.v}-${s.id}-${s.ctx}`,
-      prompt: seeded || !a.prompt ? text : `${a.prompt}\n\n${text}`,
+      prompt: seeded || !a.prompt ? prompt : `${a.prompt}\n\n${prompt}`,
       ...(pair ? { provider: pair.provider, model: pair.model } : {}),
-      ...(imgs.length > 0 ? { images: imgs.map((i) => ({ data: i.data, mediaType: i.mediaType })) } : {}),
+      ...(imgs.length + pdfs.length > 0
+        ? {
+            images: [
+              ...imgs.map((i) => ({ data: i.data, mediaType: i.mediaType })),
+              ...pdfs.map((p) => ({ data: p.data, mediaType: 'application/pdf' })),
+            ],
+          }
+        : {}),
     });
     const jobId = typeof r?.jobId === 'string' ? r.jobId : '';
     if (!jobId) throw new Error('ai:chat did not return a jobId');
@@ -739,9 +768,9 @@ $sendBtn.onclick = () => void send();
 $input.addEventListener('input', renderInputState);
 $input.addEventListener('paste', (e) => {
   const files = Array.from(e.clipboardData?.files ?? []);
-  if (files.some((f) => f.type.startsWith('image/'))) {
+  if (files.some((f) => f.type.startsWith('image/') || isTextFile(f))) {
     e.preventDefault();
-    addImageFiles(files);
+    void addFiles(files);
   }
 });
 $input.addEventListener('keydown', (e) => {

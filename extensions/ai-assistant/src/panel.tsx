@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import type { ExtensionApi } from 'folyn-extension-sdk';
 import { renderMarkdown } from './markdown';
+import {
+  ATTACH_ACCEPT,
+  DOC_SVG,
+  buildPrompt,
+  isTextFile,
+  readFiles,
+  type PendingAttachment,
+} from './attachments';
 
 export interface Assistant {
   id: string;
@@ -19,8 +27,8 @@ interface Msg {
   ts?: number;
   /** pair used for this assistant turn (chat-pair-tag, mirrors AiPanel) */
   pair?: Pair;
-  /** images sent with this user turn ({name, data: URL}) — persisted as data URLs */
-  attachments?: { name: string; url: string }[];
+  /** attachments sent with this user turn ({name, data: URL} for images, {name} for text files) — persisted */
+  attachments?: { name: string; url?: string }[];
 }
 
 /** A chat session under an assistant (mirrors the host AiPanel session model). */
@@ -32,13 +40,8 @@ interface Session {
   ctx: number;
 }
 
-/** Pending input attachment (image) — base64 without the data: prefix. */
-interface PendingImage {
-  id: string;
-  name: string;
-  mediaType: string;
-  data: string;
-}
+/** Pending input attachment (image base64 or text file content) — see attachments.ts. */
+export type PendingImage = PendingAttachment;
 
 const ASSISTANTS_KEY = 'ai-assistant:assistants';
 const SESSIONS_KEY = 'ai-assistant:sessions';
@@ -203,7 +206,6 @@ const PAPERCLIP_SVG = (
   </svg>
 );
 
-// Browser SpeechRecognition was removed — voice input is no longer supported.
 
 export function ChatAssistantPanel() {
   const [assistants, setAssistants] = useState<Assistant[]>([DEFAULT_ASSISTANT]);
@@ -219,7 +221,7 @@ export function ChatAssistantPanel() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [pairOpen, setPairOpen] = useState(false);
   const [sessOpen, setSessOpen] = useState(false);
-  const [attachments, setAttachments] = useState<PendingImage[]>([]);
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   /** Persistence gate — the persist effects below must not write the initial
    *  default state before the async load has restored the stored one (they
@@ -439,24 +441,14 @@ export function ChatAssistantPanel() {
     });
   }
 
-  // ── image attachments ──
-  const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+  // ── attachments (images + text files) ──
 
-  function addImageFiles(files: File[]) {
-    const imgs = files.filter((f) => f.type.startsWith('image/'));
-    for (const f of imgs) {
-      if (f.size > MAX_IMAGE_BYTES) continue;
-      const reader = new FileReader();
-      reader.onload = () => {
-        const url = String(reader.result ?? '');
-        const comma = url.indexOf(',');
-        if (comma < 0) return;
-        setAttachments((prev) => [
-          ...prev,
-          { id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, name: f.name, mediaType: f.type, data: url.slice(comma + 1) },
-        ]);
-      };
-      reader.readAsDataURL(f);
+  async function addFiles(files: File[]) {
+    const added = await readFiles(files);
+    if (added.length > 0) {
+      setAttachments((prev) => [...prev, ...added]);
+    } else if (files.length > 0) {
+      setNotice('仅支持 ≤4MB 图片、≤256KB 文本或 ≤16MB PDF');
     }
   }
 
@@ -470,8 +462,11 @@ export function ChatAssistantPanel() {
     const text = input.trim();
     if (!a || !s || (!text && attachments.length === 0) || busy) return;
     setInput('');
-    const imgs = attachments;
+    const sent = attachments;
     setAttachments([]);
+    const imgs = sent.filter((x) => x.kind === 'image');
+    const pdfs = sent.filter((x) => x.kind === 'pdf');
+    const prompt = buildPrompt(text, sent.filter((x) => x.kind === 'text'));
     const prevList = msgs[s.id] ?? [];
     const seeded = prevList.some((m) => m.role === 'user');
     setList(s.id, [
@@ -480,7 +475,7 @@ export function ChatAssistantPanel() {
         role: 'user',
         content: text,
         ts: Date.now(),
-        ...(imgs.length > 0 ? { attachments: imgs.map((i) => ({ name: i.name, url: `data:${i.mediaType};base64,${i.data}` })) } : {}),
+        ...(sent.length > 0 ? { attachments: sent.map((x) => (x.kind === 'image' ? { name: x.name, url: `data:${x.mediaType};base64,${x.data}` } : { name: x.name })) } : {}),
       },
       { role: 'assistant', content: '', pair: pair ?? undefined },
     ]);
@@ -491,9 +486,16 @@ export function ChatAssistantPanel() {
     try {
       await apiRef?.ai.chat({
         sessionId: `ai-assistant-${a.id}-${a.v}-${s.id}-${s.ctx}`,
-        prompt: seeded || !a.prompt ? text : `${a.prompt}\n\n${text}`,
+        prompt: seeded || !a.prompt ? prompt : `${a.prompt}\n\n${prompt}`,
         ...(pair ? { provider: pair.provider, model: pair.model } : {}),
-        ...(imgs.length > 0 ? { images: imgs.map((i) => ({ data: i.data, mediaType: i.mediaType })) } : {}),
+        ...(imgs.length + pdfs.length > 0
+          ? {
+              images: [
+                ...imgs.map((i) => ({ data: i.data, mediaType: i.mediaType })),
+                ...pdfs.map((p) => ({ data: p.data, mediaType: 'application/pdf' })),
+              ],
+            }
+          : {}),
         onEvent: (e) => {
           if (e.type === 'text' && e.content) append(s.id, e.content);
           else if (e.type === 'thinking' && e.content) appendThinking(s.id, e.content);
@@ -633,9 +635,16 @@ export function ChatAssistantPanel() {
                 <div className="chat-msg-bubble chat-msg-bubble-user">
                   {m.attachments && m.attachments.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mb-1.5">
-                      {m.attachments.map((att, j) => (
-                        <img key={j} className="w-14 h-14 object-cover rounded-md shrink-0" src={att.url} alt={att.name} title={att.name} />
-                      ))}
+                      {m.attachments.map((att, j) =>
+                        att.url ? (
+                          <img key={j} className="w-14 h-14 object-cover rounded-md shrink-0" src={att.url} alt={att.name} title={att.name} />
+                        ) : (
+                          <span key={j} className="inline-flex items-center gap-1.5 max-w-[160px] px-1.5 py-1 bg-panel border border-brd rounded-md text-[11px] text-t2 truncate" title={att.name}>
+                            <span className="text-t3 shrink-0 inline-flex" dangerouslySetInnerHTML={{ __html: DOC_SVG }} />
+                            <span className="truncate">{att.name}</span>
+                          </span>
+                        ),
+                      )}
                     </div>
                   )}
                   <div className="chat-msg-user-text">{m.content}</div>
@@ -688,8 +697,8 @@ export function ChatAssistantPanel() {
         </div>
 
         {/* Input — ChatInputBox composition. Toolbar: pair picker (with provider
-            logos) + paperclip (image attachments)
-            on the leading side; eraser (clear context) + trash (clear messages)
+            logos) + paperclip (image/text/pdf attachments) on the leading side;
+            eraser (clear context) + trash (clear messages)
             + round send button on the trailing side. Mode button omitted — the
             extension has a single Chat mode, a one-item dropdown is noise. */}
         <div className="flex flex-col py-2.5 px-3 border-t border-brd shrink-0">
@@ -697,7 +706,11 @@ export function ChatAssistantPanel() {
             <div className="flex flex-wrap gap-1.5 mb-2">
               {attachments.map((att) => (
                 <div key={att.id} className="flex items-center gap-1.5 py-1 px-1.5 bg-panel border border-brd rounded-lg text-[11px] text-t2 max-w-[160px]">
-                  <img className="w-7 h-7 object-cover rounded-md shrink-0" src={`data:${att.mediaType};base64,${att.data}`} alt={att.name} />
+                  {att.kind === 'image' ? (
+                    <img className="w-7 h-7 object-cover rounded-md shrink-0" src={`data:${att.mediaType};base64,${att.data}`} alt={att.name} />
+                  ) : (
+                    <span className="w-7 h-7 flex items-center justify-center text-t3 shrink-0" dangerouslySetInnerHTML={{ __html: DOC_SVG }} />
+                  )}
                   <span className="truncate min-w-0 flex-1">{att.name}</span>
                   <button className="w-4 h-4 flex items-center justify-center rounded-full text-[10px] text-t3 cursor-pointer shrink-0 transition-all duration-100 bg-transparent border-none hover:bg-hov hover:text-red" onClick={() => removeAttachment(att.id)} aria-label="移除附件">×</button>
                 </div>
@@ -714,9 +727,9 @@ export function ChatAssistantPanel() {
               onChange={(e) => setInput(e.target.value)}
               onPaste={(e) => {
                 const files = Array.from(e.clipboardData.files);
-                if (files.some((f) => f.type.startsWith('image/'))) {
+                if (files.some((f) => f.type.startsWith('image/') || isTextFile(f))) {
                   e.preventDefault();
-                  addImageFiles(files);
+                  void addFiles(files);
                 }
               }}
               onKeyDown={(e) => {
@@ -764,8 +777,8 @@ export function ChatAssistantPanel() {
                 className="w-7 h-7 flex items-center justify-center rounded-md text-t3 cursor-pointer transition-all duration-[120ms] hover:bg-hov hover:text-t1 disabled:opacity-40 disabled:cursor-not-allowed"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={busy}
-                title="附加图片"
-                aria-label="附加图片"
+                title="附加图片/文件"
+                aria-label="附加图片/文件"
               >
                 {PAPERCLIP_SVG}
               </button>
@@ -822,10 +835,10 @@ export function ChatAssistantPanel() {
           ref={fileInputRef}
           type="file"
           multiple
-          accept="image/*"
+          accept={ATTACH_ACCEPT}
           style={{ display: 'none' }}
           onChange={(e) => {
-            addImageFiles(Array.from(e.target.files ?? []));
+            void addFiles(Array.from(e.target.files ?? []));
             e.target.value = '';
           }}
         />
