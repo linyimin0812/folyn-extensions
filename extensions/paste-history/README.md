@@ -63,7 +63,9 @@ the sandbox CSP (`default-src 'none'`, no `img-src`) forbids `<img src="data:…
 - Capture happens while the tool window is open; a closed window cannot
   record (the sandbox tier has no background process).
 - While an image sits on the clipboard, unchanged polls are gated by
-  NSPasteboard changeCount (macOS) — no per-second re-decode.
+  NSPasteboard changeCount (macOS) / GetClipboardSequenceNumber (Windows) —
+  no per-second re-decode. Linux has no cheap signal: full reads every poll
+  while an image is on the clipboard (heavy on multi-MB images).
 - On macOS, copying a file in Finder puts its path on the text flavor, so a
   path entry may appear alongside the pasted image.
 
