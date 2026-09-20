@@ -1,6 +1,6 @@
 // Tool-window entry: mirrors the ActivityBar page (panel.tsx) feature-for-feature
 // — session header, bubbles with pair tags + thinking, toolbar (pair picker,
-// paperclip, voice, eraser, trash, send) — but in plain DOM on the isolated
+// paperclip, eraser, trash, send) — but in plain DOM on the isolated
 // folyn-extension:// origin, host capabilities via fetch-RPC.
 // ai:chat streams via polling: the fetch transport has no push channel, so
 // the host returns { jobId } and this script drains deltas with ai:chat-poll
@@ -90,8 +90,6 @@ const SVG = {
   copy: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="8" height="8" rx="1.5" /><path d="M11 5V3.5A1.5 1.5 0 009.5 2H3.5A1.5 1.5 0 002 3.5v6A1.5 1.5 0 003.5 11H5" /></svg>',
   check: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.5 3.5L13 5" /></svg>',
   cpu: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" /><rect x="9" y="9" width="6" height="6" rx="1" /><path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3" /></svg>',
-  mic: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10v1a7 7 0 0014 0v-1" /><line x1="12" y1="18" x2="12" y2="22" /></svg>',
-  stop: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>',
 };
 
 const AVATAR_COLORS = ['#3a6ef0', '#6a3af0', '#0a8ab8', '#8040d0', '#cc44cc', '#22a863', '#f5a623', '#e0484d'];
@@ -120,9 +118,6 @@ function providerIcon(p: Pair | null, size: number): HTMLElement {
   return letterAvatar(p, size);
 }
 
-const SpeechRecognitionCtor: any =
-  (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
-
 // ── state ──
 let assistants: Assistant[] = [DEFAULT_ASSISTANT];
 let msgs: Record<string, Msg[]> = {};
@@ -134,7 +129,6 @@ let busy = false;
 let pairs: Pair[] = [];
 let pair: Pair | null = null;
 let attachments: PendingImage[] = [];
-let recording = false;
 let noticeTimer: number | undefined;
 /** Persistence gate — no writes before the async load has restored state. */
 let loaded = false;
@@ -195,7 +189,6 @@ const $input = $('input') as HTMLTextAreaElement;
 const $pairBtn = $<HTMLButtonElement>('pairBtn');
 const $pairMenu = $('pairMenu');
 const $attachBtn = $<HTMLButtonElement>('attachBtn');
-const $micBtn = $<HTMLButtonElement>('micBtn');
 const $eraseBtn = $<HTMLButtonElement>('eraseBtn');
 const $clearBtn = $<HTMLButtonElement>('clearBtn');
 const $sendBtn = $<HTMLButtonElement>('sendBtn');
@@ -605,43 +598,6 @@ $fileInput.onchange = () => {
   addImageFiles(Array.from($fileInput.files ?? []));
   $fileInput.value = '';
 };
-
-// ── voice ──
-let recRef: any = null;
-let recBase = '';
-function toggleVoice(): void {
-  if (!SpeechRecognitionCtor) return;
-  if (recording) {
-    recRef?.stop();
-    return;
-  }
-  const rec = new SpeechRecognitionCtor();
-  rec.lang = 'zh-CN';
-  rec.interimResults = true;
-  rec.continuous = false;
-  recBase = $input.value.trimEnd() ? `${$input.value.trimEnd()} ` : '';
-  rec.onresult = (e: any) => {
-    let text = '';
-    for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
-    $input.value = recBase + text;
-    renderInputState();
-  };
-  rec.onend = () => { recording = false; renderMic(); };
-  rec.onerror = () => { recording = false; renderMic(); };
-  recRef = rec;
-  recording = true;
-  renderMic();
-  rec.start();
-}
-function renderMic(): void {
-  $micBtn.hidden = !SpeechRecognitionCtor;
-  if (!SpeechRecognitionCtor) return;
-  $micBtn.className = `icon-btn${recording ? ' rec' : ''}`;
-  $micBtn.innerHTML = recording ? SVG.stop : SVG.mic;
-  $micBtn.title = recording ? '点击停止录音' : '语音输入';
-}
-$micBtn.onclick = toggleVoice;
-renderMic();
 
 // ── toolbar destructive actions ──
 $eraseBtn.onclick = () => {

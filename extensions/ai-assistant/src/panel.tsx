@@ -202,23 +202,8 @@ const PAPERCLIP_SVG = (
     <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
   </svg>
 );
-const MIC_SVG = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="9" y="2" width="6" height="12" rx="3" />
-    <path d="M5 10v1a7 7 0 0014 0v-1" />
-    <line x1="12" y1="18" x2="12" y2="22" />
-  </svg>
-);
-const STOP_SVG = (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-    <rect x="6" y="6" width="12" height="12" rx="2" />
-  </svg>
-);
 
-// Browser SpeechRecognition — hidden entirely when the API is absent (the
-// host's voice button uses a macOS Rust sidecar, unreachable from extensions).
-const SpeechRecognitionCtor: any =
-  typeof window !== 'undefined' ? (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition : undefined;
+// Browser SpeechRecognition was removed — voice input is no longer supported.
 
 export function ChatAssistantPanel() {
   const [assistants, setAssistants] = useState<Assistant[]>([DEFAULT_ASSISTANT]);
@@ -235,7 +220,6 @@ export function ChatAssistantPanel() {
   const [pairOpen, setPairOpen] = useState(false);
   const [sessOpen, setSessOpen] = useState(false);
   const [attachments, setAttachments] = useState<PendingImage[]>([]);
-  const [recording, setRecording] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   /** Persistence gate — the persist effects below must not write the initial
    *  default state before the async load has restored the stored one (they
@@ -248,8 +232,6 @@ export function ChatAssistantPanel() {
   const pairRef = useRef<HTMLDivElement>(null);
   const sessRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const recRef = useRef<any>(null);
-  const recBaseRef = useRef('');
 
   /** Load the shared store (mounted once and on window focus — the tool
    *  window writes the same keys while the main window is unfocused). */
@@ -482,30 +464,6 @@ export function ChatAssistantPanel() {
     setAttachments((prev) => prev.filter((a) => a.id !== id));
   }
 
-  // ── voice input (browser SpeechRecognition) ──
-  function toggleVoice() {
-    if (!SpeechRecognitionCtor) return;
-    if (recording) {
-      recRef.current?.stop();
-      return;
-    }
-    const rec = new SpeechRecognitionCtor();
-    rec.lang = 'zh-CN';
-    rec.interimResults = true;
-    rec.continuous = false;
-    recBaseRef.current = input ? `${input.trimEnd()} ` : '';
-    rec.onresult = (e: any) => {
-      let text = '';
-      for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
-      setInput(recBaseRef.current + text);
-    };
-    rec.onend = () => setRecording(false);
-    rec.onerror = () => setRecording(false);
-    recRef.current = rec;
-    setRecording(true);
-    rec.start();
-  }
-
   async function send() {
     const a = active;
     const s = session ?? (a ? newSession(a.id) : null);
@@ -730,7 +688,7 @@ export function ChatAssistantPanel() {
         </div>
 
         {/* Input — ChatInputBox composition. Toolbar: pair picker (with provider
-            logos) + paperclip (image attachments) + voice (browser SpeechRecognition)
+            logos) + paperclip (image attachments)
             on the leading side; eraser (clear context) + trash (clear messages)
             + round send button on the trailing side. Mode button omitted — the
             extension has a single Chat mode, a one-item dropdown is noise. */}
@@ -811,18 +769,6 @@ export function ChatAssistantPanel() {
               >
                 {PAPERCLIP_SVG}
               </button>
-              {SpeechRecognitionCtor && (
-                <button
-                  type="button"
-                  className={`relative w-7 h-7 flex items-center justify-center rounded-md transition-all duration-[120ms] cursor-pointer border-none ${recording ? 'bg-red text-white' : 'text-t3 bg-transparent hover:bg-hov hover:text-t1'}`}
-                  onClick={toggleVoice}
-                  onMouseDown={(e) => e.preventDefault()}
-                  title={recording ? '点击停止录音' : '语音输入'}
-                  aria-label={recording ? '停止录音' : '语音输入'}
-                >
-                  {recording ? STOP_SVG : MIC_SVG}
-                </button>
-              )}
               <div className="flex-1" />
               <button
                 type="button"
