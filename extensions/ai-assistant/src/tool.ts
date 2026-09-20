@@ -7,7 +7,14 @@
 // (~150ms) — token streaming without postMessage.
 import { renderMarkdown } from './markdown';
 
-const RPC_URL = 'folyn-extension://localhost/ai-assistant/rpc';
+// Relative RPC URL: resolves against this extension's own document URL on
+// every platform — `folyn-extension://localhost/ai-assistant/rpc` on
+// macOS/Linux, `http://folyn-extension.localhost/ai-assistant/rpc` on
+// Windows/WebView2 (where the host serves the scheme as that virtual host
+// and the raw `folyn-extension://` form is an unknown scheme — fetch()
+// throws before ever reaching the host, so every RPC incl. ai:pairs died
+// on Windows and the model picker stayed disabled).
+const RPC_URL = 'rpc';
 
 // Storage keys — IDENTICAL to the panel (panel.tsx). Both surfaces share one
 // persisted data set: same ext:<id>: namespace (host-side), same shapes.
