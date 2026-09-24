@@ -186,6 +186,40 @@
       "author": "yiminlin",
       "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z\"/><path d=\"m21.854 2.147-10.94 10.939\"/></svg>",
       "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/0.0.11/ai-assistant-0.1.5.zip"
+    },
+    {
+      "id": "folyn-github-collector",
+      "name": {
+        "zh": "GitHub 采集器",
+        "en": "GitHub Collector"
+      },
+      "version": "0.1.0",
+      "description": {
+        "zh": "GitHub 活动采集器：轮询读取 GitHub 事件流（提交/PR/Issue），写入活动时间线",
+        "en": "GitHub activity collector: polls the GitHub event stream (commits/PRs/Issues) into the activity timeline"
+      },
+      "type": "collector",
+      "tier": "trusted",
+      "author": "Folyn",
+      "icon": "G",
+      "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/0.0.2/folyn-github-collector-0.1.0.zip"
+    },
+    {
+      "id": "folyn-window-activity-collector",
+      "name": {
+        "zh": "窗口活动采集器",
+        "en": "Window Activity Collector"
+      },
+      "version": "0.1.0",
+      "description": {
+        "zh": "窗口活动采集器：定时采样前台应用与窗口标题写入活动时间线。macOS 首次采集会触发系统自动化权限弹窗",
+        "en": "Window activity collector: samples the foreground app and window title into the activity timeline. macOS triggers an Automation permission prompt on first collection"
+      },
+      "type": "collector",
+      "tier": "trusted",
+      "author": "Folyn",
+      "icon": "W",
+      "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/0.0.2/folyn-window-activity-collector-0.1.0.zip"
     }
   ]
 }
