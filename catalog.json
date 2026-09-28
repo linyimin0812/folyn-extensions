@@ -237,6 +237,23 @@
       "author": "Folyn",
       "icon": "F",
       "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/folyn-file-collector-0.1.0/folyn-file-collector-0.1.0.zip"
+    },
+    {
+      "id": "folyn-email-collector",
+      "type": "collector",
+      "name": {
+        "zh": "邮件采集器",
+        "en": "Email Collector"
+      },
+      "version": "0.1.0",
+      "description": {
+        "zh": "轮询多个自定义 IMAP 邮箱（QQ/163/Gmail 等任意 IMAPS 服务器），将新邮件写入活动时间线（poll 模式，TLS）",
+        "en": "Polls multiple custom IMAP mailboxes (any IMAPS server — QQ/163/Gmail etc.) and writes incoming mail into the activity timeline (poll mode, TLS)"
+      },
+      "tier": "trusted",
+      "author": "Folyn",
+      "icon": "@",
+      "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/folyn-email-collector-0.1.0/folyn-email-collector-0.1.0.zip"
     }
   ]
 }
