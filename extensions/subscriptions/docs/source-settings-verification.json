@@ -1,0 +1,85 @@
+{
+  "controls": {
+    "checkboxes": 0,
+    "controlHeights": [
+      {
+        "height": 36,
+        "text": ""
+      },
+      {
+        "height": 36,
+        "text": "url"
+      },
+      {
+        "height": 36,
+        "text": ""
+      },
+      {
+        "height": 36,
+        "text": "button"
+      },
+      {
+        "height": 36,
+        "text": "button"
+      },
+      {
+        "height": 36,
+        "text": "下载现有文章（3 篇）"
+      },
+      {
+        "height": 36,
+        "text": "取消订阅…"
+      }
+    ],
+    "groups": [
+      {
+        "selected": "true",
+        "text": "工程"
+      },
+      {
+        "selected": "true",
+        "text": "前端"
+      }
+    ],
+    "nativeSelects": 0,
+    "policy": "暂停自动刷新与下载"
+  },
+  "dark": {
+    "bg": "rgb(28, 30, 35)",
+    "ink": "rgb(228, 231, 236)",
+    "rect": {
+      "bottom": 515,
+      "left": 647,
+      "right": 933,
+      "top": 403
+    },
+    "selected": "仅刷新文章列表"
+  },
+  "narrow": {
+    "activeText": "6 小时",
+    "bottom": 603,
+    "left": 33,
+    "overflow": false,
+    "right": 357,
+    "screenHeight": 800,
+    "screenWidth": 390,
+    "top": 423
+  },
+  "url": {
+    "rejected": "file:///tmp/feed.xml",
+    "saved": "https://example.com/feed.xml",
+    "retainedArticles": 4
+  },
+  "keyboard": {
+    "endEnter": true,
+    "escapeClosesMenuOnly": true
+  },
+  "otherSelects": {
+    "settingsMode": "双语",
+    "saveOptions": [
+      "原文",
+      "译文",
+      "双语"
+    ]
+  }
+}

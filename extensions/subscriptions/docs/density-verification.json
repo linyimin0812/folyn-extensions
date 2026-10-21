@@ -1,0 +1,313 @@
+{
+  "version": "0.1.2",
+  "environment": "Packaged trusted module, host Flex shell and base reset, 3 fictional sources / 12 entries, memory Vault and mock AI",
+  "geometry": {
+    "articleRows": [
+      75.125,
+      75.125,
+      75.125,
+      93.25,
+      75.125,
+      93.25,
+      75.125,
+      75.125,
+      75.125,
+      75.125,
+      75.125,
+      75.125
+    ],
+    "overflow": false,
+    "panes": [
+      {
+        "selector": ".nav",
+        "width": 196
+      },
+      {
+        "selector": ".list-pane",
+        "width": 340
+      },
+      {
+        "selector": ".reader",
+        "width": 702
+      }
+    ],
+    "readerFont": "14px / 24.92px -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", sans-serif",
+    "toolbarHeight": 42,
+    "viewport": [
+      1280,
+      800
+    ]
+  },
+  "responsive": [
+    {
+      "controls": [
+        0,
+        28,
+        28
+      ],
+      "list": {
+        "display": "flex",
+        "height": 722,
+        "width": 340
+      },
+      "nav": {
+        "display": "flex",
+        "height": 722,
+        "width": 196
+      },
+      "overflow": false,
+      "reader": {
+        "display": "flex",
+        "height": 722,
+        "width": 702
+      },
+      "root": {
+        "display": "flex",
+        "height": 764,
+        "width": 1238
+      },
+      "width": 1280
+    },
+    {
+      "controls": [
+        28,
+        28,
+        28
+      ],
+      "list": {
+        "display": "flex",
+        "height": 722,
+        "width": 340
+      },
+      "nav": {
+        "display": "none",
+        "height": 0,
+        "width": 0
+      },
+      "overflow": false,
+      "reader": {
+        "display": "flex",
+        "height": 722,
+        "width": 718
+      },
+      "root": {
+        "display": "flex",
+        "height": 764,
+        "width": 1058
+      },
+      "width": 1100
+    },
+    {
+      "controls": [
+        28,
+        28,
+        28
+      ],
+      "list": {
+        "display": "flex",
+        "height": 722,
+        "width": 340
+      },
+      "nav": {
+        "display": "none",
+        "height": 0,
+        "width": 0
+      },
+      "overflow": false,
+      "reader": {
+        "display": "flex",
+        "height": 722,
+        "width": 618
+      },
+      "root": {
+        "display": "flex",
+        "height": 764,
+        "width": 958
+      },
+      "width": 1000
+    },
+    {
+      "controls": [
+        28,
+        28,
+        28
+      ],
+      "list": {
+        "display": "flex",
+        "height": 722,
+        "width": 800
+      },
+      "nav": {
+        "display": "none",
+        "height": 0,
+        "width": 0
+      },
+      "overflow": false,
+      "reader": {
+        "display": "none",
+        "height": 0,
+        "width": 0
+      },
+      "root": {
+        "display": "flex",
+        "height": 764,
+        "width": 800
+      },
+      "width": 842
+    },
+    {
+      "controls": [
+        28,
+        28,
+        28
+      ],
+      "list": {
+        "display": "flex",
+        "height": 722,
+        "width": 678
+      },
+      "nav": {
+        "display": "none",
+        "height": 0,
+        "width": 0
+      },
+      "overflow": false,
+      "reader": {
+        "display": "none",
+        "height": 0,
+        "width": 0
+      },
+      "root": {
+        "display": "flex",
+        "height": 764,
+        "width": 678
+      },
+      "width": 720
+    },
+    {
+      "controls": [
+        28,
+        28,
+        28
+      ],
+      "list": {
+        "display": "flex",
+        "height": 651,
+        "width": 348
+      },
+      "nav": {
+        "display": "none",
+        "height": 0,
+        "width": 0
+      },
+      "overflow": false,
+      "reader": {
+        "display": "none",
+        "height": 0,
+        "width": 0
+      },
+      "root": {
+        "display": "flex",
+        "height": 730,
+        "width": 348
+      },
+      "width": 390
+    },
+    {
+      "controls": [
+        28,
+        28,
+        28
+      ],
+      "list": {
+        "display": "flex",
+        "height": 651,
+        "width": 320
+      },
+      "nav": {
+        "display": "none",
+        "height": 0,
+        "width": 0
+      },
+      "overflow": false,
+      "reader": {
+        "display": "none",
+        "height": 0,
+        "width": 0
+      },
+      "root": {
+        "display": "flex",
+        "height": 730,
+        "width": 320
+      },
+      "width": 362
+    },
+    {
+      "controls": [
+        28,
+        28,
+        28
+      ],
+      "list": {
+        "display": "flex",
+        "height": 651,
+        "width": 278
+      },
+      "nav": {
+        "display": "none",
+        "height": 0,
+        "width": 0
+      },
+      "overflow": false,
+      "reader": {
+        "display": "none",
+        "height": 0,
+        "width": 0
+      },
+      "root": {
+        "display": "flex",
+        "height": 730,
+        "width": 278
+      },
+      "width": 320
+    }
+  ],
+  "desktopModal": {
+    "centerError": [
+      0,
+      0
+    ],
+    "height": 236,
+    "viewport": [
+      1280,
+      800
+    ],
+    "width": 620
+  },
+  "narrowSaveModal": {
+    "centerError": [
+      0,
+      0.00390625
+    ],
+    "footerVisible": true,
+    "height": 497.0859375,
+    "overflow": false,
+    "viewport": [
+      320,
+      800
+    ],
+    "width": 288
+  },
+  "interactionChecks": [
+    "star toggle",
+    "read toggle",
+    "batch selection",
+    "group collapse and expand",
+    "group article filter (8 rows)",
+    "search (1 matching row)",
+    "narrow reader and back",
+    "narrow navigation drawer",
+    "centered settings and save dialogs",
+    "Escape focus returns to trigger"
+  ]
+}

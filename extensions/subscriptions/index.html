@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Folyn 订阅 · 开发验收</title>
+  <link rel="stylesheet" href="/test/host-shell.css">
+  <style>
+    html, body { margin:0; height:100%; overflow:hidden }
+    body { display:flex; flex-direction:column; background:var(--bg) }
+    #testbar { flex-shrink:0; min-height:36px; box-sizing:border-box; padding:6px 14px; background:var(--surf); color:var(--t2); font:12px/24px system-ui; display:flex; gap:12px; align-items:center; flex-wrap:wrap }
+    #testbar button { font:inherit; line-height:20px; border:1px solid var(--brd); border-radius:4px; background:var(--panel); color:var(--t2); cursor:pointer }
+    /* Match App.tsx: body-row flex-1 flex overflow-hidden, ActivityBar + page. */
+    #root { flex:1; display:flex; overflow:hidden; min-height:0 }
+    #activity-bar { width:36px; flex-shrink:0; background:var(--panel); border-right:1px solid var(--brd); box-sizing:border-box; padding-top:16px; text-align:center; color:var(--t3); font:18px system-ui }
+    #activity-bar span { display:block; margin-bottom:26px }
+  </style>
+</head>
+<body>
+  <div id="testbar"><span>宿主 Flex 容器验收 · 示例数据与模拟翻译 · 仅驻留内存</span><button id="vault-a">Vault A</button><button id="vault-b">Vault B</button></div>
+  <div id="root"><aside id="activity-bar" aria-label="模拟宿主活动栏"><span>▱</span><span>⌁</span><span>◔</span></aside></div>
+  <script type="module" src="/test/preview.tsx"></script>
+</body>
+</html>

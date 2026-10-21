@@ -1,0 +1,56 @@
+{
+  "desktop": {
+    "actions": [
+      {
+        "inHeader": true,
+        "label": "刷新全部"
+      },
+      {
+        "inHeader": true,
+        "label": "添加订阅"
+      }
+    ],
+    "overflow": false,
+    "topbars": 0,
+    "tops": [
+      {
+        "name": "workspace ",
+        "top": 36
+      },
+      {
+        "name": "nav ",
+        "top": 36
+      },
+      {
+        "name": "list-pane ",
+        "top": 36
+      },
+      {
+        "name": "reader",
+        "top": 36
+      }
+    ]
+  },
+  "minimumWidth": {
+    "width": 160,
+    "contentFits": true,
+    "buttonsFit": true
+  },
+  "narrow": {
+    "buttons": [
+      "刷新全部",
+      "添加订阅",
+      "收起来源栏"
+    ],
+    "contentFits": true,
+    "overflow": false,
+    "width": 159
+  },
+  "actions": {
+    "addDialog": true,
+    "focusRestored": "添加订阅",
+    "refreshAll": true,
+    "collapsedHidesActions": true,
+    "sourceSelectionFocus": "展开来源栏"
+  }
+}

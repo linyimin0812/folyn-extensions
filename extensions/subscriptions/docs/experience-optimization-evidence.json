@@ -1,0 +1,151 @@
+{
+  "date": "2026-10-18",
+  "version": "0.3.5",
+  "requirements": [
+    {
+      "requirement": "P1：显式保存失败保留弹窗和输入、向上报错并回滚",
+      "implementation": [
+        "src/service.ts commit/updateSource",
+        "src/settings.tsx",
+        "src/add-source.tsx"
+      ],
+      "evidence": [
+        "test/flow-commit.test.ts",
+        "test/flow-dialogs.test.ts",
+        "browser source settings simulated write failure and successful retry"
+      ],
+      "status": "verified"
+    },
+    {
+      "requirement": "P1：历史到底不残留任务，header刷新最新而非加载历史",
+      "implementation": [
+        "src/service.ts owned/refresh",
+        "src/workspace.tsx refreshCurrent"
+      ],
+      "evidence": [
+        "test/flow-commit.test.ts history exhaustion then ordinary refresh",
+        "test/workspace-interactions.test.ts source header"
+      ],
+      "status": "verified"
+    },
+    {
+      "requirement": "添加提交和图片缓存分离、提交关闭语义清晰、取消/切Vault安全",
+      "implementation": [
+        "src/service.ts addPinned/cacheBody/unsubscribe",
+        "src/add-source.tsx",
+        "src/repository.ts load"
+      ],
+      "evidence": [
+        "test/flow-commit.test.ts",
+        "test/flow-dialogs.test.ts submit guards",
+        "browser slow image fixture4500ms per image: import288ms, immediately readable text and0/4 pending"
+      ],
+      "status": "verified"
+    },
+    {
+      "requirement": "完整/部分/处理中缓存状态一致，旧限制文案更新",
+      "implementation": [
+        "src/source-actions.tsx",
+        "src/workspace.tsx",
+        "src/settings.tsx",
+        "src/repository.ts"
+      ],
+      "evidence": [
+        "test/source-actions-ui.test.ts",
+        "test/workspace-interactions.test.ts cache states",
+        "test/flow-commit.test.ts interrupted cache reload",
+        "settings source inspection8MB/64MB/no count cap"
+      ],
+      "status": "verified"
+    },
+    {
+      "requirement": "保存弹窗只补缺图、原位进度/结果、保留目录和文件名、保存互斥",
+      "implementation": [
+        "src/save.tsx"
+      ],
+      "evidence": [
+        "test/save-cache-ui.test.ts",
+        "browser29/32 ->31/32 preserving Notes andcustomfilename; explicit remote-link choice then saved to Notes/体验优化验收文档.md"
+      ],
+      "status": "verified"
+    },
+    {
+      "requirement": "搜索空态解释正确、清空搜索恢复当前视图",
+      "implementation": [
+        "src/workspace.tsx"
+      ],
+      "evidence": [
+        "test/workspace-interactions.test.ts",
+        "browser unread no-result -> clear search ->40 visible rows and search focus"
+      ],
+      "status": "verified"
+    },
+    {
+      "requirement": "长列表第40到41篇选中、焦点、阅读器同步",
+      "implementation": [
+        "src/workspace.tsx"
+      ],
+      "evidence": [
+        "test/workspace-interactions.test.ts",
+        "browser40 rendered rows ->55; active and reader both 连续阅读第41篇"
+      ],
+      "status": "verified"
+    },
+    {
+      "requirement": "大图键盘入口、原生模态、Tab循环、关闭焦点、缩放/100%/适应/移动/拖动",
+      "implementation": [
+        "src/image-viewer.tsx",
+        "src/reader.tsx",
+        "src/styles.ts"
+      ],
+      "evidence": [
+        "test/image-viewer-ui.test.ts",
+        "test/translation-stream-ui.test.ts stableimageDOM/focus duringstream",
+        "browser Enter/Space, sixTabs allinside,120%,100%,Esc restore,1000x2400 longimage scrollHeight2512 andkeyboard scrollTop976",
+        "browser resize390x700 keeps dialog390x700,toolbar reachable,Esc restores image"
+      ],
+      "status": "verified"
+    },
+    {
+      "requirement": "分组名称导航、箭头折叠、数字辅助信息",
+      "implementation": [
+        "src/workspace.tsx",
+        "src/styles.ts"
+      ],
+      "evidence": [
+        "test/workspace-interactions.test.ts",
+        "browser groupname opens group articlelist withoutcollapsing and reopens collapsedmiddlepane"
+      ],
+      "status": "verified"
+    },
+    {
+      "requirement": "刷新回环箭头、更多竖三点SVG、统一热区与反馈",
+      "implementation": [
+        "src/workspace.tsx",
+        "src/styles.ts"
+      ],
+      "evidence": [
+        "production screenshot optimization-workspace.jpg",
+        "source inspection existing Icon refresh/more reused and26px+ controls"
+      ],
+      "status": "verified"
+    }
+  ],
+  "validation": {
+    "testsPassed": 175,
+    "testsSkipped": 1,
+    "typecheck": "passed",
+    "build": "passed",
+    "package": "passed",
+    "installedNativeAppQA": "not performed: native app launch tool timed out and app inventory remained not running; no registry/approval bypass",
+    "browserScope": "production bundle with memory Vault, public-page captures and simulated HTTP/images; no real Vault writes or AI requests"
+  },
+  "artifacts": {
+    "bundleSha256": "ecd83fc53ab8b10479bceac0a5eb22269419c2b412ee73a5d7d30409494f9247",
+    "zipSha256": "84a847e90ef2b496363925233cdfe4f857028036f02fd00e55a01c110546f081",
+    "zipEntries": [
+      "manifest.json",
+      "index.js"
+    ]
+  }
+}

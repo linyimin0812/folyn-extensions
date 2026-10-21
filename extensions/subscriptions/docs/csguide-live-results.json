@@ -1,0 +1,17 @@
+{
+  "capturedAt": "2026-10-18T05:25:13.327Z",
+  "transport": "Node HTTP adapter; production parser/acquisition; no native renderer in this test",
+  "results": [
+    {
+      "url": "https://csguide.cn/",
+      "success": true,
+      "strategy": "sitemap",
+      "source": "https://csguide.cn/sitemap.xml",
+      "entries": 220,
+      "article": "https://csguide.cn/aboutme/make_money_labs.html",
+      "characters": 6043,
+      "blocks": 96,
+      "elapsedMs": 7130
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "before": {
+    "height": 764,
+    "top": 36
+  },
+  "completion": {
+    "bannerCount": 0,
+    "kind": "message-card success",
+    "layout": {
+      "height": 764,
+      "top": 36
+    },
+    "message": "已订阅，导入 3 篇文章",
+    "messageRect": {
+      "bottom": 782,
+      "top": 740
+    },
+    "overflow": false
+  },
+  "modal": {
+    "aboveFooter": true,
+    "message": "已订阅，导入 3 篇文章",
+    "rootHidden": true,
+    "withinDialog": true
+  },
+  "refresh": {
+    "kind": "message-card info",
+    "text": "刷新全部完成：新增 0 篇"
+  },
+  "narrow": {
+    "left": 72.84375,
+    "overflow": false,
+    "right": 289.15625,
+    "viewport": 320
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "version": "0.2.0",
+  "environment": "Packaged module, host Flex shell and reset, memory Vault",
+  "threeGroups": {
+    "allArticles": 12,
+    "groups": [
+      "工程",
+      "前端",
+      "每周必读"
+    ],
+    "sourceOccurrences": 3
+  },
+  "groupFilters": {
+    "frontend": 8,
+    "weekly": 4
+  },
+  "afterGroupDeletion": {
+    "allArticles": 12,
+    "groups": [
+      "工程",
+      "前端"
+    ],
+    "sourceOccurrences": 2
+  },
+  "importedMultiple": {
+    "currentArticles": 3,
+    "currentTitle": "多分组测试源",
+    "newSourceOccurrences": 2
+  },
+  "ungrouped": {
+    "allArticles": 15,
+    "sourceOccurrences": 1,
+    "ungrouped": true
+  },
+  "cancelledGroupNotCreated": true,
+  "currentFilterEdits": {
+    "before": 8,
+    "after": 4
+  },
+  "restoredMultiCount": 2
+}

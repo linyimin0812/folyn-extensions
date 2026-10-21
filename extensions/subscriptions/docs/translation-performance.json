@@ -1,0 +1,30 @@
+{
+  "scenario": "24 natural paragraphs, 100 ms fixed mocked latency per request, virtual clock",
+  "original": {
+    "requests": 24,
+    "peakConcurrency": 1,
+    "elapsedMs": 2400,
+    "writes": 50
+  },
+  "v0.2.13": {
+    "requests": 3,
+    "peakConcurrency": 2,
+    "elapsedMs": 200,
+    "writes": 6
+  },
+  "v0.2.14": {
+    "requests": 1,
+    "peakConcurrency": 1,
+    "elapsedMs": 100,
+    "writes": 4
+  },
+  "scope": "scheduler regression only; not live-provider speed or translation-quality measurement",
+  "testsPassed": 89,
+  "streaming": {
+    "previewThrottleMs": 80,
+    "checkpointIntervalMs": 750,
+    "partialVisibleBeforeCompletion": true,
+    "provisionalTextPersisted": false,
+    "automaticFullDocumentRetries": false
+  }
+}

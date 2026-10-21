@@ -1,0 +1,105 @@
+{
+  "version": "0.1.3",
+  "environment": "Packaged module, host Flex shell, memory Vault",
+  "drag": [
+    {
+      "selector": ".list-resizer",
+      "delta": 80,
+      "expected": 420,
+      "actual": 420
+    },
+    {
+      "selector": ".nav-resizer",
+      "delta": -220,
+      "expected": 160,
+      "actual": 160
+    },
+    {
+      "selector": ".nav-resizer",
+      "delta": 500,
+      "expected": 340,
+      "actual": 340
+    },
+    {
+      "selector": ".list-resizer",
+      "delta": -500,
+      "expected": 245,
+      "actual": 245
+    },
+    {
+      "selector": ".list-resizer",
+      "delta": 500,
+      "expected": 520,
+      "actual": 520
+    },
+    {
+      "selector": ".nav-resizer",
+      "delta": -120,
+      "expected": 220,
+      "actual": 220
+    },
+    {
+      "selector": ".list-resizer",
+      "delta": -160,
+      "expected": 360,
+      "actual": 360
+    }
+  ],
+  "keyboard": {
+    "left": 352,
+    "right": 360
+  },
+  "vaultRestoration": {
+    "cursor": "",
+    "selection": "",
+    "sliders": 0,
+    "widths": [
+      220,
+      360
+    ]
+  },
+  "responsive": [
+    {
+      "overflow": false,
+      "separators": [
+        {
+          "display": "none",
+          "label": "调整来源栏宽度"
+        },
+        {
+          "display": "block",
+          "label": "调整文章列表宽度"
+        }
+      ],
+      "viewport": 1000
+    },
+    {
+      "overflow": false,
+      "separators": [
+        {
+          "display": "none",
+          "label": "调整来源栏宽度"
+        },
+        {
+          "display": "none",
+          "label": "调整文章列表宽度"
+        }
+      ],
+      "viewport": 720
+    },
+    {
+      "overflow": false,
+      "separators": [
+        {
+          "display": "block",
+          "label": "调整来源栏宽度"
+        },
+        {
+          "display": "block",
+          "label": "调整文章列表宽度"
+        }
+      ],
+      "viewport": 1280
+    }
+  ]
+}

@@ -1,0 +1,158 @@
+{
+  "version": "0.1.4",
+  "environment": "Packaged module with host shell and CSS reset, memory Vault",
+  "forms": [
+    {
+      "centerError": [
+        0,
+        0
+      ],
+      "controls": [
+        {
+          "height": 36,
+          "tag": "INPUT",
+          "type": "text"
+        }
+      ],
+      "focus": {
+        "offset": "-1px",
+        "outline": "1px",
+        "shadow": "none"
+      },
+      "title": "添加订阅"
+    },
+    {
+      "centerError": [
+        0,
+        0
+      ],
+      "controls": [
+        {
+          "height": 36,
+          "tag": "INPUT",
+          "type": "text"
+        }
+      ],
+      "focus": {
+        "offset": "0px",
+        "outline": "3px",
+        "shadow": "none"
+      },
+      "title": "创建分组"
+    },
+    {
+      "centerError": [
+        0,
+        0.00390625
+      ],
+      "controls": [
+        {
+          "height": 36,
+          "tag": "SELECT",
+          "type": "select-one"
+        },
+        {
+          "height": 36,
+          "tag": "SELECT",
+          "type": "select-one"
+        },
+        {
+          "height": 36,
+          "tag": "INPUT",
+          "type": "text"
+        },
+        {
+          "height": 36,
+          "tag": "INPUT",
+          "type": "text"
+        }
+      ],
+      "focus": {
+        "offset": "0px",
+        "outline": "3px",
+        "shadow": "none"
+      },
+      "title": "订阅设置 · vault-a"
+    },
+    {
+      "centerError": [
+        0,
+        0
+      ],
+      "controls": [
+        {
+          "height": 36,
+          "tag": "INPUT",
+          "type": "text"
+        },
+        {
+          "height": 36,
+          "tag": "INPUT",
+          "type": "text"
+        },
+        {
+          "height": 36,
+          "tag": "SELECT",
+          "type": "select-one"
+        }
+      ],
+      "focus": {
+        "offset": "0px",
+        "outline": "3px",
+        "shadow": "none"
+      },
+      "title": "订阅源设置"
+    },
+    {
+      "centerError": [
+        0,
+        0
+      ],
+      "controls": [
+        {
+          "height": 36,
+          "tag": "SELECT",
+          "type": "select-one"
+        },
+        {
+          "height": 36,
+          "tag": "INPUT",
+          "type": "text"
+        },
+        {
+          "height": 36,
+          "tag": "INPUT",
+          "type": "text"
+        }
+      ],
+      "focus": {
+        "offset": "0px",
+        "outline": "3px",
+        "shadow": "none"
+      },
+      "title": "保存到 Vault"
+    }
+  ],
+  "fieldFocus": {
+    "borderWidth": "1px",
+    "height": 36,
+    "outlineOffset": "-1px",
+    "outlineStyle": "solid",
+    "outlineWidth": "1px",
+    "shadow": "none",
+    "tag": "INPUT"
+  },
+  "selectFocus": {
+    "borderWidth": "1px",
+    "height": 36,
+    "outlineOffset": "-1px",
+    "outlineStyle": "solid",
+    "outlineWidth": "1px",
+    "shadow": "none",
+    "tag": "SELECT"
+  },
+  "radio": {
+    "width": 14,
+    "height": 14
+  }
+}

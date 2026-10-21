@@ -1,0 +1,355 @@
+[
+  {
+    "name": "source",
+    "bodyScroll": false,
+    "centerError": {
+      "x": 0,
+      "y": 0
+    },
+    "controls": [
+      36,
+      36,
+      36,
+      36,
+      36,
+      36,
+      36,
+      36,
+      36,
+      36,
+      36
+    ],
+    "footerVisible": true,
+    "height": 739.625,
+    "overflow": false,
+    "title": "订阅源设置",
+    "width": 660
+  },
+  {
+    "name": "remove",
+    "bodyScroll": false,
+    "centerError": {
+      "x": 0,
+      "y": 0
+    },
+    "controls": [
+      36,
+      36
+    ],
+    "footerVisible": true,
+    "height": 351.015625,
+    "overflow": false,
+    "title": "取消订阅",
+    "width": 460
+  },
+  {
+    "name": "create-group",
+    "bodyScroll": false,
+    "centerError": {
+      "x": 0,
+      "y": 0
+    },
+    "controls": [
+      36,
+      36,
+      36
+    ],
+    "footerVisible": true,
+    "height": 232.34375,
+    "overflow": false,
+    "title": "创建分组",
+    "width": 460
+  },
+  {
+    "name": "settings",
+    "bodyScroll": false,
+    "centerError": {
+      "x": 0,
+      "y": 0.00390625
+    },
+    "controls": [
+      36,
+      36,
+      36,
+      36,
+      36,
+      36
+    ],
+    "footerVisible": true,
+    "height": 712.7265625,
+    "overflow": false,
+    "title": "订阅设置",
+    "width": 660
+  },
+  {
+    "name": "clear",
+    "bodyScroll": false,
+    "centerError": {
+      "x": 0,
+      "y": 0
+    },
+    "controls": [
+      36,
+      36
+    ],
+    "footerVisible": true,
+    "height": 370.53125,
+    "overflow": false,
+    "title": "清理文章缓存",
+    "width": 460
+  },
+  {
+    "name": "save",
+    "bodyScroll": false,
+    "centerError": {
+      "x": 0,
+      "y": 0.00390625
+    },
+    "controls": [
+      36,
+      36,
+      36,
+      36,
+      36
+    ],
+    "footerVisible": true,
+    "height": 637.3203125,
+    "overflow": false,
+    "title": "保存到 Vault",
+    "width": 660
+  },
+  {
+    "name": "translation",
+    "bodyScroll": false,
+    "centerError": {
+      "x": 0,
+      "y": 0
+    },
+    "controls": [
+      36,
+      36,
+      36
+    ],
+    "footerVisible": true,
+    "height": 396.640625,
+    "overflow": false,
+    "title": "全文翻译",
+    "width": 460
+  },
+  {
+    "name": "add-empty",
+    "bodyScroll": false,
+    "centerError": {
+      "x": 0,
+      "y": 0
+    },
+    "controls": [
+      36,
+      36
+    ],
+    "footerVisible": true,
+    "height": 307.34375,
+    "overflow": false,
+    "title": "添加订阅",
+    "width": 660
+  },
+  {
+    "name": "add-preview",
+    "bodyScroll": true,
+    "centerError": {
+      "x": 0,
+      "y": 0
+    },
+    "controls": [
+      36,
+      36,
+      36,
+      36,
+      36,
+      36
+    ],
+    "footerVisible": true,
+    "height": 760,
+    "overflow": false,
+    "title": "添加订阅",
+    "width": 660
+  },
+  {
+    "name": "source-390",
+    "bodyScroll": true,
+    "centerError": {
+      "x": 0,
+      "y": 0
+    },
+    "controls": [
+      36,
+      36,
+      36,
+      36,
+      36,
+      36,
+      36,
+      36,
+      36,
+      36,
+      36
+    ],
+    "footerVisible": true,
+    "height": 776,
+    "overflow": false,
+    "title": "订阅源设置",
+    "width": 360
+  },
+  {
+    "name": "edit-group-390",
+    "bodyScroll": false,
+    "centerError": {
+      "x": 0,
+      "y": 0.00390625
+    },
+    "controls": [
+      36,
+      36,
+      36,
+      36
+    ],
+    "footerVisible": true,
+    "height": 296.9453125,
+    "overflow": false,
+    "title": "编辑分组",
+    "width": 360
+  },
+  {
+    "name": "settings-390",
+    "bodyScroll": true,
+    "centerError": {
+      "x": 0,
+      "y": 0
+    },
+    "controls": [
+      36,
+      36,
+      36,
+      36,
+      36,
+      36
+    ],
+    "footerVisible": true,
+    "height": 776,
+    "overflow": false,
+    "title": "订阅设置",
+    "width": 360
+  },
+  {
+    "name": "clear-390",
+    "bodyScroll": false,
+    "centerError": {
+      "x": 0,
+      "y": 0.00390625
+    },
+    "controls": [
+      36,
+      36
+    ],
+    "footerVisible": true,
+    "height": 355.1328125,
+    "overflow": false,
+    "title": "清理文章缓存",
+    "width": 360
+  },
+  {
+    "name": "save-success",
+    "bodyScroll": false,
+    "centerError": {
+      "x": 0,
+      "y": 0.00390625
+    },
+    "controls": [
+      36,
+      36
+    ],
+    "footerVisible": true,
+    "height": 267.2421875,
+    "overflow": false,
+    "title": "文档已保存",
+    "width": 460
+  },
+  {
+    "name": "source-320",
+    "bodyScroll": true,
+    "centerError": {
+      "x": 0,
+      "y": 0
+    },
+    "controls": [
+      36,
+      36,
+      36,
+      36,
+      36,
+      36,
+      36,
+      36,
+      36,
+      36,
+      36
+    ],
+    "footerVisible": true,
+    "height": 616,
+    "overflow": false,
+    "title": "订阅源设置",
+    "width": 290
+  },
+  {
+    "name": "source-short-window",
+    "bodyScroll": true,
+    "centerError": {
+      "x": 0,
+      "y": 0
+    },
+    "controls": [
+      36,
+      36,
+      36,
+      36,
+      36,
+      36,
+      36,
+      36,
+      36,
+      36,
+      36
+    ],
+    "footerVisible": true,
+    "height": 440,
+    "overflow": false,
+    "title": "订阅源设置",
+    "width": 660
+  },
+  {
+    "name": "source-dark",
+    "bodyScroll": false,
+    "centerError": {
+      "x": 0,
+      "y": 0
+    },
+    "controls": [
+      36,
+      36,
+      36,
+      36,
+      36,
+      36,
+      36,
+      36,
+      36,
+      36,
+      36
+    ],
+    "footerVisible": true,
+    "height": 739.625,
+    "overflow": false,
+    "title": "订阅源设置",
+    "width": 660
+  }
+]

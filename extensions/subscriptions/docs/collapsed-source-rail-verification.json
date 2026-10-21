@@ -1,0 +1,49 @@
+{
+  "desktop": [
+    {
+      "active": "全部文章",
+      "listWidth": 340,
+      "navWidth": 36,
+      "rows": 12,
+      "title": "全部文章"
+    },
+    {
+      "active": "未读",
+      "listWidth": 340,
+      "navWidth": 36,
+      "rows": 8,
+      "title": "未读"
+    },
+    {
+      "active": "收藏",
+      "listWidth": 340,
+      "navWidth": 36,
+      "rows": 3,
+      "title": "收藏"
+    },
+    {
+      "active": "已保存",
+      "listWidth": 340,
+      "navWidth": 36,
+      "rows": 0,
+      "title": "已保存"
+    }
+  ],
+  "narrow": {
+    "focus": "未读",
+    "listWidth": 242,
+    "navWidth": 36,
+    "overflow": false,
+    "title": "未读"
+  },
+  "actions": {
+    "add": true,
+    "settings": true
+  },
+  "narrowReadingToList": {
+    "rows": 3,
+    "title": "收藏",
+    "navCollapsed": true,
+    "focus": "收藏"
+  }
+}

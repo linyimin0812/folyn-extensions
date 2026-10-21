@@ -1,0 +1,12 @@
+<div class="art-code"><p><span>CODE<span class="lang">TypeScript</span></span></p><pre><span class="kw">const</span><span class="pl"> vaultId = process.</span><span class="nm">env</span><span class="pl">.</span><span class="nm">VAULT_ID</span><span class="pl">!; </span><span class="cm">// the vault's ID, from claude-lock.json
+
+</span><span class="kw">await</span><span class="pl"> client.</span><span class="nm">beta</span><span class="pl">.</span><span class="nm">vaults</span><span class="pl">.</span><span class="nm">credentials</span><span class="pl">.</span><span class="fn">create</span><span class="pl">(vaultId, {
+  </span><span class="nm">display_name</span><span class="pl">: </span><span class="ar">"SLACK_BOT_TOKEN"</span><span class="pl">,
+  </span><span class="nm">auth</span><span class="pl">: {
+    </span><span class="nm">type</span><span class="pl">: </span><span class="ar">"environment_variable"</span><span class="pl">,
+    </span><span class="nm">secret_name</span><span class="pl">: </span><span class="ar">"SLACK_BOT_TOKEN"</span><span class="pl">,
+    </span><span class="nm">secret_value</span><span class="pl">: process.</span><span class="nm">env</span><span class="pl">.</span><span class="nm">SLACK_BOT_TOKEN</span><span class="pl">!,
+    </span><span class="nm">networking</span><span class="pl">: { </span><span class="nm">type</span><span class="pl">: </span><span class="ar">"limited"</span><span class="pl">, </span><span class="nm">allowed_hosts</span><span class="pl">: [</span><span class="ar">"slack.com"</span><span class="pl">] },
+    </span><span class="nm">injection_location</span><span class="pl">: { </span><span class="nm">header</span><span class="pl">: </span><span class="kw">true</span><span class="pl"> },
+  },
+});</span></pre></div>

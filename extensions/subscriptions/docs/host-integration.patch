@@ -1,0 +1,2190 @@
+diff --git a/apps/desktop/src-tauri/Cargo.toml b/apps/desktop/src-tauri/Cargo.toml
+index d2767960..973f703f 100644
+--- a/apps/desktop/src-tauri/Cargo.toml
++++ b/apps/desktop/src-tauri/Cargo.toml
+@@ -45,6 +45,10 @@ sha2 = "0.10"
+ # Windows Chrome cookie/password decryption path (os_crypt.encrypted_key is
+ # base64-encoded). Kept after the ed25519 signature scaffolding was removed.
+ base64 = "0.22"
++# Already locked transitively; bounded subscription decoding needs direct APIs.
++encoding_rs = "0.8"
++flate2 = "1"
++brotli = "8"
+ # HTTP client for the sandbox-tier `plugin_http_fetch` command. Sandbox plugins
+ # run in a host-webview iframe whose `fetch()` is gated by the main page's CSP
+ # `connect-src`; rather than relax CSP to admit every plugin-declared origin,
+diff --git a/apps/desktop/src-tauri/Cargo.lock b/apps/desktop/src-tauri/Cargo.lock
+index 59f7bb99..781e1af2 100644
+--- a/apps/desktop/src-tauri/Cargo.lock
++++ b/apps/desktop/src-tauri/Cargo.lock
+@@ -1689,11 +1689,14 @@ dependencies = [
+  "arboard",
+  "base64 0.22.1",
+  "block2 0.5.1",
++ "brotli",
+  "cbc",
+  "cipher 0.5.2",
+  "cocoa",
+  "cpal",
+  "dirs 5.0.1",
++ "encoding_rs",
++ "flate2",
+  "futures",
+  "hmac 0.13.0",
+  "http",
+diff --git a/apps/desktop/src-tauri/src/commands/project_commands.rs b/apps/desktop/src-tauri/src/commands/project_commands.rs
+index 255ada14..cabc30f8 100644
+--- a/apps/desktop/src-tauri/src/commands/project_commands.rs
++++ b/apps/desktop/src-tauri/src/commands/project_commands.rs
+@@ -17,6 +17,7 @@ pub struct WatcherEventPayload {
+     #[serde(rename = "type")]
+     pub event_type: String,
+     pub paths: Vec<String>,
++    pub root: String,
+ }
+ 
+ /// Start a recursive file watcher on a background thread. Returns immediately —
+@@ -61,6 +62,7 @@ pub async fn start_vault_watcher(
+                     let event_type = format!("{:?}", event.kind);
+                     let _ = app_handle.emit("app://vault-watcher-event", WatcherEventPayload {
+                         event_type,
++                        root: base_path.clone(),
+                         paths: event.paths.iter().map(|p| p.to_string_lossy().into_owned()).collect(),
+                     });
+                 }
+diff --git a/apps/desktop/src-tauri/src/extension_security.rs b/apps/desktop/src-tauri/src/extension_security.rs
+index dd000f55..62eac96b 100644
+--- a/apps/desktop/src-tauri/src/extension_security.rs
++++ b/apps/desktop/src-tauri/src/extension_security.rs
+@@ -194,6 +194,12 @@ pub fn validate_manifest(manifest: &serde_json::Value) -> Result<(), String> {
+         }
+     }
+ 
++    if let Some(permission) = manifest.get("permissions").and_then(|p| p.get("subscriptions")) {
++        if tier != "trusted" || !permission.is_object() || !permission["vault"].is_boolean() || !permission["network"].is_boolean()
++            || permission.get("render").is_some_and(|value| !value.is_boolean()) {
++            return Err("permissions.subscriptions requires a trusted extension and boolean vault/network grants".into());
++        }
++    }
+     Ok(())
+ }
+ 
+diff --git a/apps/desktop/src-tauri/src/lib.rs b/apps/desktop/src-tauri/src/lib.rs
+index ac1e1d0b..dc03a564 100644
+--- a/apps/desktop/src-tauri/src/lib.rs
++++ b/apps/desktop/src-tauri/src/lib.rs
+@@ -15,6 +15,8 @@ mod extension_security;
+ mod extension_install;
+ mod extension_lifecycle;
+ mod extension_fetch;
++mod subscriptions;
++mod subscription_render;
+ mod extension_rpc;
+ mod chat;
+ mod list_models;
+@@ -754,7 +756,8 @@ pub fn run() {
+             Ok(())
+         }
+         })
+-        .invoke_handler(tauri::generate_handler![
++        .invoke_handler({
++            let handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![
+             commands::open_file,
+             commands::drain_pending_open_files,
+             commands::save_file,
+@@ -855,6 +858,10 @@ pub fn run() {
+             extension_lifecycle::get_extension_record,
+             extension_lifecycle::read_extension_file,
+             extension_fetch::extension_http_fetch,
++            subscriptions::subscription_fetch,
++            subscription_render::subscription_render,
++            subscription_render::subscription_cancel_renders,
++            subscriptions::subscription_vault_io,
+             extension_fetch::fetch_url,
+             extension_rpc::extension_rpc_respond,
+             voice::voice_start,
+@@ -867,7 +874,16 @@ pub fn run() {
+             voice::voice_set_global_hotkey,
+             voice::voice_orb_hide,
+             voice::voice_debug_frontmost,
+-        ]);
++        ];
++            move |invoke: tauri::ipc::Invoke| {
++                // Acquisition webviews run untrusted pages. Custom app commands
++                // bypass plugin ACL, so deny them before generated dispatch.
++                if subscription_render::is_acquisition_webview(invoke.message.webview_ref().label()) {
++                    invoke.resolver.reject("app IPC is disabled in subscription acquisition webviews");
++                    true
++                } else { handler(invoke) }
++            }
++        });
+ 
+     // Single-instance guard (Windows + macOS). On Windows, "Open With" on an
+     // associated file while Folyn is running launches a SECOND process; on
+diff --git a/apps/desktop/src-tauri/src/subscriptions.rs b/apps/desktop/src-tauri/src/subscriptions.rs
+new file mode 100644
+index 00000000..1a1a7ebf
+--- /dev/null
++++ b/apps/desktop/src-tauri/src/subscriptions.rs
+@@ -0,0 +1,598 @@
++//! Trusted subscriptions: bounded public downloads and pinned vault IO.
++use crate::extension_commands::{extensions_dir, is_valid_extension_id, read_extensions_json};
++use crate::extension_security::compute_hash;
++use base64::{engine::general_purpose::STANDARD, Engine};
++use serde::Serialize;
++use std::{
++    collections::HashMap,
++    fs,
++    io::Write,
++    net::{IpAddr, SocketAddr, ToSocketAddrs},
++    path::{Component, Path, PathBuf},
++    time::Duration,
++};
++
++pub(crate) fn authorize(app: &tauri::AppHandle, id: &str, capability: &str) -> Result<(), String> {
++    if !is_valid_extension_id(id) {
++        return Err("invalid extension id".into());
++    }
++    let dir = extensions_dir(app)?;
++    let records = read_extensions_json(&dir)?;
++    let record = records
++        .iter()
++        .find(|r| r.id == id && r.tier == "trusted" && r.trusted && r.enabled)
++        .ok_or("subscriptions requires an approved, enabled trusted extension")?;
++    let manifest_bytes = fs::read(dir.join(id).join("manifest.json")).map_err(|e| e.to_string())?;
++    if record.integrity.get("manifest.json") != Some(&compute_hash(&manifest_bytes)) {
++        return Err(
++            "subscription manifest integrity changed; reinstall and approve the extension".into(),
++        );
++    }
++    let manifest: serde_json::Value =
++        serde_json::from_slice(&manifest_bytes).map_err(|e| e.to_string())?;
++    if manifest["tier"] != "trusted" || manifest["permissions"]["subscriptions"][capability] != true
++    {
++        return Err(format!(
++            "permissions.subscriptions.{capability} is required"
++        ));
++    }
++    Ok(())
++}
++
++fn public_ip(ip: IpAddr) -> bool {
++    match ip {
++        IpAddr::V4(v) => {
++            let [a, b, c, _] = v.octets();
++            !(v.is_private()
++                || v.is_loopback()
++                || v.is_link_local()
++                || v.is_unspecified()
++                || v.is_multicast()
++                || a == 0
++                || a >= 240
++                || (a == 100 && (64..=127).contains(&b))
++                || (a == 192 && b == 0 && c == 0)
++                || (a == 192 && b == 0 && c == 2)
++                || (a == 198 && (b == 18 || b == 19 || b == 51))
++                || (a == 203 && b == 0 && c == 113))
++        }
++        IpAddr::V6(v) => v
++            .to_ipv4_mapped()
++            .map(|v| public_ip(IpAddr::V4(v)))
++            .unwrap_or_else(|| {
++                let s = v.segments();
++                // Only global unicast, excluding documentation/transition ranges.
++                (s[0] & 0xe000) == 0x2000
++                    && s[0] != 0x2002
++                    && !(s[0] == 0x2001 && (s[1] < 0x0200 || s[1] == 0x0db8))
++            }),
++    }
++}
++pub(crate) fn validate_url(raw: &str) -> Result<reqwest::Url, String> {
++    let url = reqwest::Url::parse(raw).map_err(|e| e.to_string())?;
++    if !matches!(url.scheme(), "http" | "https")
++        || !url.username().is_empty()
++        || url.password().is_some()
++        || url.host_str().is_none()
++    {
++        return Err("only public HTTP(S) URLs without credentials are allowed".into());
++    }
++    Ok(url)
++}
++#[derive(Serialize)]
++pub struct SubscriptionResponse {
++    pub(crate) status: u16,
++    pub(crate) headers: HashMap<String, String>,
++    pub(crate) body: String,
++    pub(crate) url: String,
++}
++/// Resolve on a blocking worker; direct HTTP pins these exact public IPs.
++/// Browser fallback can validate navigation DNS but its engine owns connection DNS.
++pub(crate) async fn public_addresses(url: &reqwest::Url) -> Result<Vec<SocketAddr>, String> {
++    let host = url
++        .host_str()
++        .ok_or("URL has no host")?
++        .trim_matches(['[', ']'])
++        .to_owned();
++    let port = url.port_or_known_default().ok_or("URL has no port")?;
++    let addresses = tauri::async_runtime::spawn_blocking(move || {
++        (host.as_str(), port)
++            .to_socket_addrs()
++            .map(|v| v.collect::<Vec<_>>())
++            .map_err(|e| e.to_string())
++    })
++    .await
++    .map_err(|e| e.to_string())??;
++    if addresses.is_empty() || addresses.iter().any(|a| !public_ip(a.ip())) {
++        return Err("private/local network destinations are blocked".into());
++    }
++    Ok(addresses)
++}
++fn limited_decode(reader: impl std::io::Read, limit: usize) -> Result<Vec<u8>, String> {
++    use std::io::Read;
++    let mut out = Vec::new();
++    reader
++        .take(limit as u64 + 1)
++        .read_to_end(&mut out)
++        .map_err(|e| format!("response decompression failed: {e}"))?;
++    if out.len() > limit {
++        return Err("decoded response exceeds size limit".into());
++    }
++    Ok(out)
++}
++fn decode_content(mut bytes: Vec<u8>, encoding: &str, limit: usize) -> Result<Vec<u8>, String> {
++    for encoding in encoding
++        .split(',')
++        .rev()
++        .map(|v| v.trim().to_ascii_lowercase())
++    {
++        bytes = match encoding.as_str() {
++            "" | "identity" => bytes,
++            "gzip" | "x-gzip" => {
++                limited_decode(flate2::read::GzDecoder::new(bytes.as_slice()), limit)?
++            }
++            "br" => limited_decode(brotli::Decompressor::new(bytes.as_slice(), 4096), limit)?,
++            "deflate" => limited_decode(flate2::read::ZlibDecoder::new(bytes.as_slice()), limit)
++                .or_else(|_| {
++                    limited_decode(flate2::read::DeflateDecoder::new(bytes.as_slice()), limit)
++                })?,
++            other => return Err(format!("unsupported response content encoding: {other}")),
++        };
++    }
++    Ok(bytes)
++}
++fn charset_after(text: &str, key: &str) -> Option<&'static encoding_rs::Encoding> {
++    let lower = text.to_ascii_lowercase();
++    let start = lower.find(key)? + key.len();
++    let label = lower[start..]
++        .trim_start_matches(|c: char| c.is_ascii_whitespace() || c == '=' || c == '\'' || c == '"')
++        .split(|c: char| c.is_ascii_whitespace() || matches!(c, '\'' | '"' | '>' | '/' | ';' | '?'))
++        .next()?;
++    encoding_rs::Encoding::for_label(label.as_bytes())
++}
++fn decode_text(bytes: &[u8], content_type: &str) -> String {
++    if let Some((encoding, bom)) = encoding_rs::Encoding::for_bom(bytes) {
++        return encoding.decode(&bytes[bom..]).0.into_owned();
++    }
++    let prefix = String::from_utf8_lossy(&bytes[..bytes.len().min(8192)]);
++    let encoding = charset_after(content_type, "charset")
++        .or_else(|| {
++            let lower = prefix.to_ascii_lowercase();
++            let start = lower.find("<?xml")?;
++            let end = lower[start..].find("?>")? + start;
++            charset_after(&prefix[start..end], "encoding")
++        })
++        .or_else(|| {
++            let lower = prefix.to_ascii_lowercase();
++            let mut offset = 0;
++            while let Some(index) = lower[offset..].find("<meta") {
++                let start = offset + index;
++                let end = lower[start..].find('>')? + start;
++                if let Some(enc) = charset_after(&prefix[start..end], "charset") {
++                    return Some(enc);
++                }
++                offset = end + 1;
++            }
++            None
++        })
++        .unwrap_or(encoding_rs::UTF_8);
++    encoding.decode(bytes).0.into_owned()
++}
++
++fn request_error(error: reqwest::Error) -> String {
++    use std::error::Error;
++    let mut message = error.to_string();
++    let mut source = error.source();
++    while let Some(error) = source {
++        message.push_str(": ");
++        message.push_str(&error.to_string());
++        source = error.source();
++    }
++    message
++}
++async fn download(raw: String, binary: bool) -> Result<SubscriptionResponse, String> {
++    let mut url = validate_url(&raw)?;
++    for _ in 0..=8 {
++        let host = url
++            .host_str()
++            .ok_or("URL has no host")?
++            .trim_matches(['[', ']'])
++            .to_owned();
++        let addresses = public_addresses(&url).await?;
++        // Resolve once and pin addresses; no proxy or DNS-rebinding bypass.
++        let client = reqwest::Client::builder()
++            .no_proxy()
++            .redirect(reqwest::redirect::Policy::none())
++            .timeout(Duration::from_secs(25))
++            .resolve_to_addrs(&host, &addresses)
++            .build()
++            .map_err(request_error)?;
++        let mut response = client
++            .get(url.clone())
++            .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15")
++            .header("Accept", "text/html,application/xhtml+xml,application/xml,application/feed+json,application/json;q=0.9,*/*;q=0.8")
++            .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
++            .header("Accept-Encoding", "gzip, deflate, br")
++            .send()
++            .await
++            .map_err(request_error)?;
++        if response.status().is_redirection() {
++            let location = response
++                .headers()
++                .get("location")
++                .ok_or("redirect missing location")?
++                .to_str()
++                .map_err(|e| e.to_string())?;
++            url = validate_url(url.join(location).map_err(|e| e.to_string())?.as_str())?;
++            continue;
++        }
++        let limit = if binary {
++            20 * 1024 * 1024
++        } else {
++            8 * 1024 * 1024
++        };
++        if response.content_length().is_some_and(|n| n > limit as u64) {
++            return Err("download exceeds size limit".into());
++        }
++        let status = response.status().as_u16();
++        let mut headers: HashMap<String, String> = response
++            .headers()
++            .iter()
++            .filter_map(|(k, v)| {
++                v.to_str()
++                    .ok()
++                    .map(|v| (k.as_str().to_owned(), v.to_owned()))
++            })
++            .collect();
++        let mut bytes = Vec::new();
++        while let Some(chunk) = response.chunk().await.map_err(request_error)? {
++            if bytes.len() + chunk.len() > limit {
++                return Err("download exceeds size limit".into());
++            }
++            bytes.extend_from_slice(&chunk);
++        }
++        let content_encoding = headers.get("content-encoding").cloned().unwrap_or_else(|| {
++            // Sitemaps are often .xml.gz files without a Content-Encoding header.
++            if !binary && bytes.starts_with(&[0x1f, 0x8b]) {
++                "gzip".into()
++            } else {
++                String::new()
++            }
++        });
++        let content_type = headers.get("content-type").cloned().unwrap_or_default();
++        let body = tauri::async_runtime::spawn_blocking(move || {
++            let bytes = decode_content(bytes, &content_encoding, limit)?;
++            Ok::<String, String>(if binary {
++                STANDARD.encode(bytes)
++            } else {
++                decode_text(&bytes, &content_type)
++            })
++        })
++        .await
++        .map_err(|e| e.to_string())??;
++        headers.remove("content-encoding");
++        headers.remove("content-length");
++        return Ok(SubscriptionResponse {
++            status,
++            headers,
++            body,
++            url: url.to_string(),
++        });
++    }
++    Err("too many redirects".into())
++}
++#[tauri::command]
++pub async fn subscription_fetch(
++    app: tauri::AppHandle,
++    extension_id: String,
++    url: String,
++    binary: bool,
++    request_id: Option<String>,
++) -> Result<SubscriptionResponse, String> {
++    let gate_app = app.clone();
++    let gate_id = extension_id.clone();
++    tauri::async_runtime::spawn_blocking(move || authorize(&gate_app, &gate_id, "network"))
++        .await
++        .map_err(|e| e.to_string())??;
++    let direct = tokio::time::timeout(Duration::from_secs(30), download(url.clone(), binary))
++        .await
++        .map_err(|_| "download timed out".to_string())
++        .and_then(|result| result);
++    let direct_error = match direct {
++        Ok(response) if !binary || !matches!(response.status, 403 | 429) => return Ok(response),
++        Ok(response) => format!("image HTTP {}", response.status),
++        Err(error) if !binary => return Err(error),
++        Err(error) => error,
++    };
++    // The optional ID is provided/tracked only for activations with render grant.
++    // Native render_image independently rechecks both grants and all navigation.
++    let Some(request_id) = request_id else {
++        return Err(direct_error);
++    };
++    crate::subscription_render::render_image(app, extension_id, request_id, url)
++        .await
++        .map_err(|error| format!("{direct_error}; browser image fallback: {error}"))
++}
++
++fn scoped_path(root: &str, relative: &str, create_parent: bool) -> Result<PathBuf, String> {
++    let rel = Path::new(relative);
++    if relative.is_empty()
++        || relative.contains('\\')
++        || relative.contains(':')
++        || rel.components().any(|c| !matches!(c, Component::Normal(_)))
++    {
++        return Err("vault path must be relative without traversal".into());
++    }
++    let root = fs::canonicalize(root).map_err(|e| e.to_string())?;
++    let target = root.join(rel);
++    // Validate each existing component before creating directories, rejecting symlink escapes.
++    let mut cursor = root.clone();
++    let parts: Vec<_> = rel.components().collect();
++    for (i, part) in parts.iter().enumerate() {
++        cursor.push(part.as_os_str());
++        match fs::symlink_metadata(&cursor) {
++            Ok(meta) => {
++                if meta.file_type().is_symlink() {
++                    return Err("symlinks are not allowed in subscription vault paths".into());
++                }
++            }
++            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
++                if create_parent && i + 1 < parts.len() {
++                    match fs::create_dir(&cursor) {
++                        Ok(()) => {}
++                        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
++                            // Another save may have created this parent after our
++                            // lookup. Accept only a real directory, never a link.
++                            let metadata =
++                                fs::symlink_metadata(&cursor).map_err(|e| e.to_string())?;
++                            if metadata.file_type().is_symlink() || !metadata.is_dir() {
++                                return Err(
++                                    "subscription parent path must be a directory without symlinks"
++                                        .into(),
++                                );
++                            }
++                        }
++                        Err(e) => return Err(e.to_string()),
++                    }
++                }
++            }
++            Err(e) => return Err(e.to_string()),
++        }
++    }
++    Ok(target)
++}
++fn atomic_write(path: &Path, bytes: &[u8], exclusive: bool) -> Result<(), String> {
++    let parent = path.parent().ok_or("missing parent directory")?;
++    let mut file = None;
++    let mut temp = PathBuf::new();
++    for n in 0..100 {
++        temp = parent.join(format!(
++            ".folyn-subscription-{}-{}-{n}.tmp",
++            std::process::id(),
++            std::time::SystemTime::now()
++                .duration_since(std::time::UNIX_EPOCH)
++                .map_err(|e| e.to_string())?
++                .as_nanos()
++        ));
++        match fs::OpenOptions::new()
++            .write(true)
++            .create_new(true)
++            .open(&temp)
++        {
++            Ok(f) => {
++                file = Some(f);
++                break;
++            }
++            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
++            Err(e) => return Err(e.to_string()),
++        }
++    }
++    let result = (|| {
++        let mut file = file.ok_or("failed to create temporary file")?;
++        file.write_all(bytes).map_err(|e| e.to_string())?;
++        file.sync_all().map_err(|e| e.to_string())?;
++        drop(file);
++        if exclusive {
++            fs::hard_link(&temp, path).map_err(|e| e.to_string())?;
++        } else {
++            fs::rename(&temp, path).map_err(|e| e.to_string())?;
++        }
++        #[cfg(unix)]
++        fs::File::open(parent)
++            .and_then(|f| f.sync_all())
++            .map_err(|e| e.to_string())?;
++        Ok(())
++    })();
++    let _ = fs::remove_file(&temp);
++    result
++}
++// The caller first validates the full path with scoped_path. Recheck the final
++// entry without following links, including entries replaced since validation.
++fn remove_path(path: &Path) -> Result<(), String> {
++    let metadata = match fs::symlink_metadata(path) {
++        Ok(metadata) => metadata,
++        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
++        Err(error) => return Err(error.to_string()),
++    };
++    if metadata.file_type().is_symlink() {
++        return Err("symlinks are not allowed in subscription vault paths".into());
++    }
++    // remove_dir_all unlinks symlinks inside the tree without following them.
++    let result = if metadata.is_dir() {
++        fs::remove_dir_all(path)
++    } else {
++        fs::remove_file(path)
++    };
++    match result {
++        Ok(()) => Ok(()),
++        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
++        Err(error) => Err(error.to_string()),
++    }
++}
++#[tauri::command]
++pub async fn subscription_vault_io(
++    app: tauri::AppHandle,
++    extension_id: String,
++    root: String,
++    path: String,
++    operation: String,
++    content: Option<String>,
++) -> Result<serde_json::Value, String> {
++    tauri::async_runtime::spawn_blocking(move || {
++        authorize(&app, &extension_id, "vault")?;
++        let writing = matches!(
++            operation.as_str(),
++            "writeText" | "writeBinary" | "createText"
++        );
++        let path = scoped_path(&root, &path, writing)?;
++        match operation.as_str() {
++            "readText" => fs::read_to_string(path)
++                .map(serde_json::Value::String)
++                .map_err(|e| e.to_string()),
++            "readBinary" => fs::read(path)
++                .map(|v| serde_json::Value::String(STANDARD.encode(v)))
++                .map_err(|e| e.to_string()),
++            "exists" => Ok(serde_json::Value::Bool(path.exists())),
++            "remove" => remove_path(&path).map(|_| serde_json::Value::Null),
++            "writeText" | "createText" | "writeBinary" => {
++                let content = content.ok_or("missing content")?;
++                let bytes = if operation == "writeBinary" {
++                    STANDARD.decode(content).map_err(|e| e.to_string())?
++                } else {
++                    content.into_bytes()
++                };
++                atomic_write(&path, &bytes, operation == "createText")?;
++                Ok(serde_json::Value::Null)
++            }
++            _ => Err("unknown subscription vault operation".into()),
++        }
++    })
++    .await
++    .map_err(|e| e.to_string())?
++}
++#[cfg(test)]
++mod tests {
++    use super::*;
++    #[test]
++    fn rejects_local_addresses_and_credentials() {
++        for value in [
++            "127.0.0.1",
++            "10.1.2.3",
++            "169.254.169.254",
++            "100.64.0.1",
++            "::1",
++            "::ffff:127.0.0.1",
++            "fc00::1",
++        ] {
++            assert!(!public_ip(value.parse().unwrap()), "{value}");
++        }
++        assert!(public_ip("8.8.8.8".parse().unwrap()));
++        assert!(validate_url("https://user:pass@example.com").is_err());
++        assert!(validate_url("file:///tmp/a").is_err());
++    }
++    #[test]
++    fn compressed_content_and_declared_charsets_are_decoded_with_limits() {
++        let text = "订阅博客";
++        let (gbk, _, _) = encoding_rs::GBK.encode(text);
++        assert_eq!(decode_text(&gbk, "text/html; charset=gbk"), text);
++        let html = [b"<meta charset=gbk>".as_slice(), gbk.as_ref()].concat();
++        assert!(decode_text(&html, "text/html").contains(text));
++        let mut gzip = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
++        gzip.write_all(text.as_bytes()).unwrap();
++        let compressed = gzip.finish().unwrap();
++        assert_eq!(
++            decode_content(compressed.clone(), "gzip", 1024).unwrap(),
++            text.as_bytes()
++        );
++        assert!(decode_content(compressed, "gzip", 2).is_err());
++        assert!(decode_content(vec![1, 2, 3], "unknown", 1024).is_err());
++    }
++    #[test]
++    fn concurrent_saves_can_create_the_same_parent_directory() {
++        let root = std::env::temp_dir().join(format!("folyn-parent-race-{}", std::process::id()));
++        let _ = fs::remove_dir_all(&root);
++        fs::create_dir_all(&root).unwrap();
++        let barrier = std::sync::Arc::new(std::sync::Barrier::new(32));
++        let workers: Vec<_> = (0..32)
++            .map(|n| {
++                let root = root.clone();
++                let barrier = barrier.clone();
++                std::thread::spawn(move || {
++                    barrier.wait();
++                    let path = scoped_path(
++                        root.to_str().unwrap(),
++                        &format!("Articles/assets/{n}.png"),
++                        true,
++                    )?;
++                    atomic_write(&path, b"complete", true)
++                })
++            })
++            .collect();
++        for worker in workers {
++            worker.join().unwrap().unwrap();
++        }
++        assert_eq!(
++            fs::read_dir(root.join("Articles/assets")).unwrap().count(),
++            32
++        );
++        fs::remove_dir_all(root).unwrap();
++    }
++    #[test]
++    fn removing_cache_trees_and_missing_paths_is_idempotent() {
++        let root = std::env::temp_dir().join(format!("folyn-remove-cache-{}", std::process::id()));
++        let _ = fs::remove_dir_all(&root);
++        fs::create_dir_all(root.join("images/article/nested")).unwrap();
++        fs::create_dir_all(root.join("Notes")).unwrap();
++        fs::write(root.join("images/article/nested/one.png"), b"cached").unwrap();
++        fs::write(root.join("Notes/user.md"), b"user note").unwrap();
++        for relative in ["images/article", "images/article", "bodies/not-cached/v1"] {
++            let path = scoped_path(root.to_str().unwrap(), relative, false).unwrap();
++            remove_path(&path).unwrap();
++            assert!(!path.exists());
++        }
++        let file = root.join("cached.json");
++        fs::write(&file, b"cache").unwrap();
++        remove_path(&file).unwrap();
++        remove_path(&file).unwrap();
++        assert!(!file.exists());
++        assert_eq!(fs::read(root.join("Notes/user.md")).unwrap(), b"user note");
++        // An invalid parent is a genuine IO error, not an absent cache entry.
++        fs::write(root.join("not-a-directory"), b"file").unwrap();
++        assert!(remove_path(&root.join("not-a-directory/child")).is_err());
++        fs::remove_dir_all(root).unwrap();
++    }
++    #[cfg(unix)]
++    #[test]
++    fn removing_cache_does_not_follow_symlinks() {
++        let root = std::env::temp_dir().join(format!("folyn-remove-links-{}", std::process::id()));
++        let _ = fs::remove_dir_all(&root);
++        fs::create_dir_all(root.join("cache")).unwrap();
++        fs::create_dir_all(root.join("user-notes")).unwrap();
++        fs::write(root.join("user-notes/note.md"), b"preserved").unwrap();
++        std::os::unix::fs::symlink(root.join("user-notes"), root.join("linked")).unwrap();
++        assert!(scoped_path(root.to_str().unwrap(), "linked", false).is_err());
++        assert!(scoped_path(root.to_str().unwrap(), "linked/note.md", false).is_err());
++        assert!(remove_path(&root.join("linked")).is_err());
++        std::os::unix::fs::symlink(root.join("user-notes"), root.join("cache/linked")).unwrap();
++        let path = scoped_path(root.to_str().unwrap(), "cache", false).unwrap();
++        remove_path(&path).unwrap();
++        assert_eq!(
++            fs::read(root.join("user-notes/note.md")).unwrap(),
++            b"preserved"
++        );
++        assert!(!root.join("cache").exists());
++        fs::remove_dir_all(root).unwrap();
++    }
++    #[test]
++    fn exclusive_create_never_overwrites() {
++        let dir =
++            std::env::temp_dir().join(format!("folyn-subscription-test-{}", std::process::id()));
++        fs::create_dir_all(&dir).unwrap();
++        let path = dir.join("entry.md");
++        let _ = fs::remove_file(&path);
++        atomic_write(&path, b"first", true).unwrap();
++        assert!(atomic_write(&path, b"second", true).is_err());
++        assert_eq!(fs::read(&path).unwrap(), b"first");
++        fs::remove_dir_all(&dir).unwrap();
++    }
++}
+diff --git a/apps/desktop/src-tauri/src/subscription_render.rs b/apps/desktop/src-tauri/src/subscription_render.rs
+new file mode 100644
+index 00000000..55a4529d
+--- /dev/null
++++ b/apps/desktop/src-tauri/src/subscription_render.rs
+@@ -0,0 +1,677 @@
++//! Isolated, bounded browser fallback for public subscription pages.
++use crate::subscriptions::{authorize, public_addresses, validate_url, SubscriptionResponse};
++use base64::{engine::general_purpose::STANDARD, Engine};
++use serde::Deserialize;
++use std::{
++    collections::{HashMap, HashSet},
++    fs,
++    path::PathBuf,
++    sync::{
++        atomic::{AtomicBool, Ordering},
++        Arc, Mutex, OnceLock,
++    },
++    time::{Duration, Instant},
++};
++use tauri::{webview::NewWindowResponse, Manager, WebviewUrl, WebviewWindowBuilder};
++use tokio::sync::{mpsc, oneshot, Semaphore};
++
++pub(crate) const RENDER_PREFIX: &str = "subscription-render-";
++pub(crate) fn is_acquisition_webview(label: &str) -> bool {
++    label.starts_with(RENDER_PREFIX)
++}
++const MAX_HTML: usize = 8 * 1024 * 1024;
++const MAX_IMAGE: usize = 20 * 1024 * 1024;
++#[derive(Clone, Copy, PartialEq)]
++enum AcquisitionKind {
++    Page,
++    Image,
++}
++const RENDER_SECONDS: u64 = 28;
++static RENDER_LIMIT: Semaphore = Semaphore::const_new(1);
++#[derive(Default)]
++struct Jobs {
++    active: HashMap<String, (String, Arc<AtomicBool>)>,
++    cancelled: HashSet<(String, String)>,
++}
++fn jobs() -> &'static Mutex<Jobs> {
++    static JOBS: OnceLock<Mutex<Jobs>> = OnceLock::new();
++    JOBS.get_or_init(Mutex::default)
++}
++fn valid_job_id(id: &str) -> bool {
++    (16..=64).contains(&id.len()) && id.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
++}
++
++struct RenderLease {
++    app: tauri::AppHandle,
++    label: String,
++    request_id: String,
++    profile: PathBuf,
++    cancelled: Arc<AtomicBool>,
++}
++impl Drop for RenderLease {
++    fn drop(&mut self) {
++        self.cancelled.store(true, Ordering::Release);
++        if let Ok(mut state) = jobs().lock() {
++            state.active.remove(&self.request_id);
++        }
++        let app = self.app.clone();
++        let label = self.label.clone();
++        let profile = self.profile.clone();
++        let _ = self.app.run_on_main_thread(move || {
++            if let Some(window) = app.get_webview_window(&label) {
++                let _ = window.clear_all_browsing_data();
++                let _ = window.destroy();
++            }
++            // WebView2 may release the isolated profile handles asynchronously.
++            tauri::async_runtime::spawn(async move {
++                for _ in 0..3 {
++                    tokio::time::sleep(Duration::from_millis(250)).await;
++                    let path = profile.clone();
++                    if tauri::async_runtime::spawn_blocking(move || fs::remove_dir_all(path))
++                        .await
++                        .is_ok_and(|v| v.is_ok())
++                    {
++                        break;
++                    }
++                }
++            });
++        });
++    }
++}
++
++/// Cancellation is accepted after disable/uninstall so activation teardown can
++/// always destroy its own outstanding isolated windows. No file/network access.
++#[tauri::command]
++pub async fn subscription_cancel_renders(
++    app: tauri::AppHandle,
++    extension_id: String,
++    request_ids: Vec<String>,
++) -> Result<(), String> {
++    if !crate::extension_commands::is_valid_extension_id(&extension_id)
++        || request_ids.len() > 32
++        || request_ids.iter().any(|id| !valid_job_id(id))
++    {
++        return Err("invalid render cancellation".into());
++    }
++    let mut state = jobs().lock().map_err(|_| "render registry unavailable")?;
++    for id in request_ids {
++        if let Some((owner, cancelled)) = state.active.get(&id) {
++            if owner != &extension_id {
++                continue;
++            }
++            cancelled.store(true, Ordering::Release);
++        } else {
++            if state.cancelled.len() < 128 {
++                state.cancelled.insert((extension_id.clone(), id.clone()));
++            }
++            continue;
++        }
++        if let Some(window) = app.get_webview_window(&format!("{RENDER_PREFIX}{id}")) {
++            let _ = window.destroy();
++        }
++    }
++    Ok(())
++}
++
++// Runs at document start in all frames. The app-level Invoke guard is the
++// authoritative boundary; hiding the JS bridge is defense in depth only.
++const ISOLATE_SCRIPT: &str = r#"(() => {
++  for (const key of ['__TAURI__','__TAURI_INTERNALS__','__TAURI_EVENT_PLUGIN_INTERNALS__']) {
++    try { delete window[key]; Object.defineProperty(window,key,{value:undefined,configurable:false}); } catch (_) {}
++  }
++  try { Object.defineProperty(window,'open',{value:()=>null,configurable:false}); } catch (_) {}
++  try { navigator.serviceWorker?.getRegistrations().then(rs=>rs.forEach(r=>r.unregister())); } catch (_) {}
++})()"#;
++const SNAPSHOT_SCRIPT: &str = r#"(() => { try {
++  const root=document.documentElement;
++  if(!root) return {ready:false,url:location.href};
++  const text=(document.body?.innerText||root.textContent||'').trim();
++  const title=document.title||'';
++  const lower=(title+' '+text.slice(0,1200)).toLowerCase();
++  let blocked='';
++  if(/verify (that )?you are human|checking your browser|just a moment\.\.\.|attention required.*cloudflare|captcha verification/.test(lower) || [...document.querySelectorAll('iframe[src*="captcha"],#challenge-running,#cf-challenge-running')].some(el=>el.getBoundingClientRect().width>100&&el.getBoundingClientRect().height>40)) blocked='verification/CAPTCHA page';
++  else if([...document.querySelectorAll('input[type="password"]')].some(el=>el.getClientRects().length>0) && /sign in|log in|login|登录|登入/.test(lower)) blocked='login required';
++  const xml=!/html/i.test(root.tagName)||/xml/.test(document.contentType||'');
++  const clone=root.cloneNode(true);
++  if(!xml) {
++    clone.querySelectorAll('script').forEach(s=>{if(!/^(application\/(ld\+)?json|text\/json)$/i.test(s.getAttribute('type')||''))s.remove();});
++    clone.querySelectorAll('iframe,object,embed').forEach(s=>s.remove());
++    [clone,...clone.querySelectorAll('*')].forEach(el=>{for(const a of [...el.attributes])if(/^on/i.test(a.name))el.removeAttribute(a.name);});
++  }
++  const body=clone.outerHTML;
++  if(body.length>8388608 || new TextEncoder().encode(body).length>8388608) return {error:'rendered document exceeds 8 MiB limit'};
++  const links=root.querySelectorAll('a[href]').length;
++  return {ready:document.readyState==='complete',url:location.href,body,title,blocked,textLength:text.length,links,xml,
++    article:!!root.querySelector('article,main,[itemtype*="Article"]'),signature:[body.length,text.length,links,document.body?.scrollHeight||0].join(':')};
++} catch(e){return {error:String(e)}} })()"#;
++
++// Fetch only the currently validated image document, with no credentials or
++// fetch redirects. Keep original bytes (including animated GIFs), never canvas.
++const IMAGE_SCRIPT: &str = r#"(() => {
++  const key='__folynImageAcquisition';
++  if(window[key]) return window[key];
++  if(document.readyState!=='complete') return {ready:false};
++  if(!/^image\//i.test(document.contentType||'')) return {error:'browser image acquisition requires an image response'};
++  const state={ready:false};Object.defineProperty(window,key,{value:state});
++  (async()=>{const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),20000);
++    try {
++      const response=await fetch(location.href,{credentials:'omit',redirect:'error',signal:controller.signal});
++      const type=response.headers.get('content-type')||'';
++      if(!response.ok) throw new Error('image HTTP '+response.status);
++      if(!/^image\//i.test(type)) throw new Error('browser image response is not an image');
++      const limit=20971520;
++      if(Number(response.headers.get('content-length')||0)>limit) throw new Error('image exceeds 20 MiB limit');
++      const reader=response.body?.getReader();if(!reader) throw new Error('image response stream unavailable');
++      const chunks=[];let size=0;
++      while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>limit){await reader.cancel();throw new Error('image exceeds 20 MiB limit')}chunks.push(value)}
++      if(!size) throw new Error('image response is empty');
++      let encoded='';for(const chunk of chunks)for(let i=0;i<chunk.length;i+=8192)encoded+=String.fromCharCode(...chunk.subarray(i,i+8192));
++      Object.assign(state,{ready:true,url:response.url,body:btoa(encoded),contentType:type,status:response.status,byteLength:size});
++    }catch(error){state.error=String(error)}finally{clearTimeout(timer)}
++  })();return state;
++})()"#;
++
++#[derive(Deserialize, Default)]
++#[serde(rename_all = "camelCase")]
++struct Snapshot {
++    #[serde(default)]
++    ready: bool,
++    #[serde(default)]
++    url: String,
++    #[serde(default)]
++    body: String,
++    #[serde(default)]
++    title: String,
++    #[serde(default)]
++    blocked: String,
++    #[serde(default)]
++    text_length: usize,
++    #[serde(default)]
++    links: usize,
++    #[serde(default)]
++    xml: bool,
++    #[serde(default)]
++    article: bool,
++    #[serde(default)]
++    signature: String,
++    #[serde(default)]
++    error: String,
++    #[serde(default)]
++    content_type: String,
++    #[serde(default)]
++    status: u16,
++    #[serde(default)]
++    byte_length: usize,
++}
++fn parse_snapshot(raw: &str) -> Result<Snapshot, String> {
++    // eval_with_callback serializes the result itself. Native backends may
++    // wrap a JSON string result once more; accept either explicit shape.
++    let value: serde_json::Value =
++        serde_json::from_str(raw).map_err(|e| format!("invalid render callback: {e}"))?;
++    match value {
++        serde_json::Value::String(s) => serde_json::from_str(&s),
++        v => serde_json::from_value(v),
++    }
++    .map_err(|e| format!("invalid render snapshot: {e}"))
++}
++async fn snapshot(
++    window: &tauri::WebviewWindow,
++    kind: AcquisitionKind,
++) -> Result<Snapshot, String> {
++    let (tx, mut rx) = mpsc::channel(1);
++    window
++        .eval_with_callback(
++            if kind == AcquisitionKind::Image {
++                IMAGE_SCRIPT
++            } else {
++                SNAPSHOT_SCRIPT
++            },
++            move |value| {
++                let _ = tx.try_send(value);
++            },
++        )
++        .map_err(|e| format!("render evaluation failed: {e}"))?;
++    let raw = tokio::time::timeout(Duration::from_secs(2), rx.recv())
++        .await
++        .map_err(|_| "render evaluation timed out")?
++        .ok_or("render evaluation closed")?;
++    parse_snapshot(&raw)
++}
++fn snapshot_ready(value: &Snapshot, elapsed: Duration, stable: Duration) -> bool {
++    if !value.ready || value.body.is_empty() || !value.blocked.is_empty() || !value.error.is_empty()
++    {
++        return false;
++    }
++    let useful = value.xml
++        || (value.article && value.text_length >= 40)
++        || value.text_length >= 120
++        || value.links >= 2;
++    elapsed >= Duration::from_secs(3)
++        && stable >= Duration::from_millis(1500)
++        && (useful || (elapsed >= Duration::from_secs(12) && value.text_length > 0))
++}
++fn image_response(value: Snapshot) -> Result<SubscriptionResponse, String> {
++    if !(200..300).contains(&value.status)
++        || !value
++            .content_type
++            .to_ascii_lowercase()
++            .starts_with("image/")
++    {
++        return Err("browser image response must be a successful image".into());
++    }
++    if value.byte_length == 0
++        || value.byte_length > MAX_IMAGE
++        || value.body.len() > MAX_IMAGE.div_ceil(3) * 4
++    {
++        return Err("browser image response exceeds size limit or is empty".into());
++    }
++    let bytes = STANDARD
++        .decode(&value.body)
++        .map_err(|_| "invalid browser image encoding")?;
++    if bytes.len() != value.byte_length || bytes.len() > MAX_IMAGE {
++        return Err("browser image response byte count mismatch".into());
++    }
++    Ok(SubscriptionResponse {
++        status: value.status,
++        headers: HashMap::from([
++            ("content-type".into(), value.content_type),
++            ("x-folyn-rendered".into(), "true".into()),
++        ]),
++        body: value.body,
++        url: value.url,
++    })
++}
++async fn render_page(
++    app: tauri::AppHandle,
++    extension_id: String,
++    request_id: String,
++    url: String,
++    kind: AcquisitionKind,
++) -> Result<SubscriptionResponse, String> {
++    let cancelled = Arc::new(AtomicBool::new(false));
++    {
++        let mut state = jobs().lock().map_err(|_| "render registry unavailable")?;
++        if state
++            .cancelled
++            .remove(&(extension_id.clone(), request_id.clone()))
++        {
++            return Err("subscription render cancelled".into());
++        }
++        if state.active.len() >= 8 {
++            return Err("subscription renderer queue is full; retry later".into());
++        }
++        if state.active.contains_key(&request_id) {
++            return Err("duplicate render request".into());
++        }
++        state.active.insert(
++            request_id.clone(),
++            (extension_id.clone(), cancelled.clone()),
++        );
++    }
++    let label = format!("{RENDER_PREFIX}{request_id}");
++    let profile = std::env::temp_dir().join(format!("folyn-{label}"));
++    let _lease = RenderLease {
++        app: app.clone(),
++        label: label.clone(),
++        request_id,
++        profile: profile.clone(),
++        cancelled: cancelled.clone(),
++    };
++    // Queue both pages and images behind the same bounded renderer. Register
++    // first so queued work is cancelled by activation disposal as well.
++    let permit = RENDER_LIMIT.acquire();
++    tokio::pin!(permit);
++    let _permit = loop {
++        tokio::select! {
++            permit = &mut permit => break permit.map_err(|_| "subscription renderer unavailable")?,
++            _ = tokio::time::sleep(Duration::from_millis(100)) => {
++                if cancelled.load(Ordering::Acquire) { return Err("subscription render cancelled".into()); }
++            }
++        }
++    };
++    let gate_app = app.clone();
++    tauri::async_runtime::spawn_blocking(move || {
++        authorize(&gate_app, &extension_id, "render")?;
++        if kind == AcquisitionKind::Image {
++            authorize(&gate_app, &extension_id, "network")?;
++        }
++        Ok::<(), String>(())
++    })
++    .await
++    .map_err(|e| e.to_string())??;
++    let initial = validate_url(&url)?;
++    public_addresses(&initial).await?;
++    if cancelled.load(Ordering::Acquire) {
++        return Err("subscription render cancelled".into());
++    }
++    let expected_url = Arc::new(Mutex::new(initial.to_string()));
++    let navigation_loading = Arc::new(AtomicBool::new(true));
++    let expected_load = expected_url.clone();
++    let loading_callback = navigation_loading.clone();
++    let approved = Arc::new(Mutex::new(HashSet::from([initial.to_string()])));
++    let blocked = Arc::new(Mutex::new(None::<String>));
++    let (nav_tx, mut nav_rx) = mpsc::channel::<String>(8);
++    let build_app = app.clone();
++    let build_label = label.clone();
++    let approved_nav = approved.clone();
++    let blocked_nav = blocked.clone();
++    let cancelled_build = cancelled.clone();
++    let (built_tx, built_rx) = oneshot::channel();
++    app.run_on_main_thread(move || {
++        if cancelled_build.load(Ordering::Acquire) {
++            let _ = built_tx.send(Err("subscription render cancelled".to_string()));
++            return;
++        }
++        let result =
++            WebviewWindowBuilder::new(&build_app, &build_label, WebviewUrl::External(initial))
++                .title("Subscription page acquisition")
++                .visible(false)
++                .focused(false)
++                .skip_taskbar(true)
++                .inner_size(1280.0, 900.0)
++                .incognito(true)
++                .data_directory(profile)
++                .disable_drag_drop_handler()
++                .devtools(false)
++                .general_autofill_enabled(false)
++                .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
++                .initialization_script_for_all_frames(ISOLATE_SCRIPT)
++                .on_page_load(move |_, payload| {
++                    if payload.event() == tauri::webview::PageLoadEvent::Finished
++                        && expected_load
++                            .lock()
++                            .is_ok_and(|expected| expected.as_str() == payload.url().as_str())
++                    {
++                        loading_callback.store(false, Ordering::Release);
++                    }
++                })
++                .on_new_window(|_, _| NewWindowResponse::Deny)
++                .on_download(|_, _| false)
++                .on_navigation(move |target| {
++                    if cancelled_build.load(Ordering::Acquire) {
++                        return false;
++                    }
++                    if target.as_str() == "about:blank" {
++                        return true;
++                    }
++                    let target = match validate_url(target.as_str()) {
++                        Ok(v) => v,
++                        Err(e) => {
++                            if let Ok(mut blocked) = blocked_nav.lock() {
++                                *blocked = Some(format!("render navigation blocked: {e}"));
++                            }
++                            return false;
++                        }
++                    };
++                    if approved_nav
++                        .lock()
++                        .is_ok_and(|a| a.contains(target.as_str()))
++                    {
++                        return true;
++                    }
++                    let _ = nav_tx.try_send(target.to_string());
++                    false
++                })
++                .build()
++                .map(|_| ())
++                .map_err(|e| format!("isolated render webview unavailable: {e}"));
++        let _ = built_tx.send(result);
++    })
++    .map_err(|e| e.to_string())?;
++    tokio::time::timeout(Duration::from_secs(5), built_rx)
++        .await
++        .map_err(|_| "render window creation timed out")?
++        .map_err(|_| "render window creation closed")??;
++    let started = Instant::now();
++    let mut signature = String::new();
++    let mut stable_since = Instant::now();
++    let mut steps = 0u32;
++    let mut nav_count = 0u32;
++    let mut last = Snapshot::default();
++    loop {
++        if cancelled.load(Ordering::Acquire) {
++            return Err("subscription render cancelled".into());
++        }
++        if let Some(error) = blocked
++            .lock()
++            .map_err(|_| "render navigation state unavailable")?
++            .clone()
++        {
++            return Err(error);
++        }
++        while let Ok(candidate) = nav_rx.try_recv() {
++            nav_count += 1;
++            if nav_count > 12 {
++                return Err("render navigation limit exceeded".into());
++            }
++            let candidate = validate_url(&candidate)?;
++            public_addresses(&candidate)
++                .await
++                .map_err(|e| format!("render navigation blocked: {e}"))?;
++            approved
++                .lock()
++                .map_err(|_| "render navigation state unavailable")?
++                .insert(candidate.to_string());
++            if cancelled.load(Ordering::Acquire) {
++                return Err("subscription render cancelled".into());
++            }
++            *expected_url
++                .lock()
++                .map_err(|_| "render navigation state unavailable")? = candidate.to_string();
++            navigation_loading.store(true, Ordering::Release);
++            app.get_webview_window(&label)
++                .ok_or("render window closed")?
++                .navigate(candidate)
++                .map_err(|e| e.to_string())?;
++            signature.clear();
++            steps = 0;
++            stable_since = Instant::now();
++        }
++        let window = app
++            .get_webview_window(&label)
++            .ok_or("render window closed")?;
++        match snapshot(&window, kind).await {
++            Ok(value) => {
++                if !value.error.is_empty() {
++                    return Err(value.error);
++                }
++                if !value.blocked.is_empty() {
++                    return Err(format!(
++                        "subscription render blocked: {} ({})",
++                        value.blocked, value.title
++                    ));
++                }
++                if kind == AcquisitionKind::Image {
++                    if value.ready && !navigation_loading.load(Ordering::Acquire) {
++                        let final_url = validate_url(&value.url)?;
++                        public_addresses(&final_url).await?;
++                        return image_response(value);
++                    }
++                    tokio::time::sleep(Duration::from_millis(250)).await;
++                    continue;
++                }
++                if value.body.len() > MAX_HTML {
++                    return Err("rendered document exceeds 8 MiB limit".into());
++                }
++                if value.signature != signature {
++                    signature = value.signature.clone();
++                    stable_since = Instant::now();
++                }
++                let elapsed = started.elapsed();
++                if value.ready
++                    && steps < 4
++                    && elapsed >= Duration::from_millis(1000 + steps as u64 * 700)
++                {
++                    window.eval(format!("window.scrollTo(0, Math.min(document.documentElement.scrollHeight, {} * window.innerHeight));",steps+1)).map_err(|e|e.to_string())?;
++                    steps += 1;
++                    stable_since = Instant::now();
++                }
++                if !navigation_loading.load(Ordering::Acquire)
++                    && steps >= 4
++                    && snapshot_ready(&value, elapsed, stable_since.elapsed())
++                {
++                    let final_url = validate_url(&value.url)?;
++                    public_addresses(&final_url).await?;
++                    return Ok(SubscriptionResponse {
++                        status: 200,
++                        headers: HashMap::from([
++                            (
++                                "content-type".into(),
++                                if value.xml {
++                                    "application/xml; charset=utf-8".into()
++                                } else {
++                                    "text/html; charset=utf-8".into()
++                                },
++                            ),
++                            ("x-folyn-rendered".into(), "true".into()),
++                            ("x-folyn-status-unavailable".into(), "true".into()),
++                        ]),
++                        body: value.body,
++                        url: final_url.to_string(),
++                    });
++                }
++                last = value;
++            }
++            Err(e) => {
++                if started.elapsed() > Duration::from_secs(10) {
++                    return Err(e);
++                }
++            }
++        }
++        if started.elapsed() >= Duration::from_secs(24) {
++            return Err(format!(
++                "subscription render timed out: {}",
++                if last.body.is_empty() {
++                    "page did not load"
++                } else if last.text_length == 0 && last.links == 0 {
++                    "empty document"
++                } else {
++                    "page content did not settle"
++                }
++            ));
++        }
++        tokio::time::sleep(Duration::from_millis(500)).await;
++    }
++}
++#[tauri::command]
++pub async fn subscription_render(
++    app: tauri::AppHandle,
++    extension_id: String,
++    request_id: String,
++    url: String,
++) -> Result<SubscriptionResponse, String> {
++    if !valid_job_id(&request_id) {
++        return Err("invalid render request id".into());
++    }
++    tokio::time::timeout(
++        Duration::from_secs(RENDER_SECONDS),
++        render_page(app, extension_id, request_id, url, AcquisitionKind::Page),
++    )
++    .await
++    .map_err(|_| format!("subscription render timed out after {RENDER_SECONDS} seconds"))?
++}
++/// Internal image-only fallback. Not a general browser fetch API: it shares
++/// isolation, main-navigation checks, lifecycle registry and deadline with pages.
++pub(crate) async fn render_image(
++    app: tauri::AppHandle,
++    extension_id: String,
++    request_id: String,
++    url: String,
++) -> Result<SubscriptionResponse, String> {
++    if !valid_job_id(&request_id) {
++        return Err("invalid image request id".into());
++    }
++    tokio::time::timeout(
++        Duration::from_secs(RENDER_SECONDS),
++        render_page(app, extension_id, request_id, url, AcquisitionKind::Image),
++    )
++    .await
++    .map_err(|_| {
++        format!("subscription image acquisition timed out after {RENDER_SECONDS} seconds")
++    })?
++}
++#[cfg(test)]
++mod tests {
++    use super::*;
++    #[test]
++    fn image_bytes_and_mime_are_preserved_and_invalid_payloads_reject() {
++        let bytes = b"GIF89a\x01\x00\x01\x00animated-original-payload";
++        let make = || Snapshot {
++            ready: true,
++            url: "https://example.com/animation.gif".into(),
++            body: STANDARD.encode(bytes),
++            content_type: "image/gif".into(),
++            status: 200,
++            byte_length: bytes.len(),
++            ..Default::default()
++        };
++        let response = image_response(make()).unwrap();
++        assert_eq!(response.headers["content-type"], "image/gif");
++        assert_eq!(STANDARD.decode(response.body).unwrap(), bytes);
++        let mut value = make();
++        value.content_type = "text/html".into();
++        assert!(image_response(value).is_err());
++        let mut value = make();
++        value.status = 403;
++        assert!(image_response(value).is_err());
++        let mut value = make();
++        value.byte_length = MAX_IMAGE + 1;
++        assert!(image_response(value).is_err());
++        let mut value = make();
++        value.body = "invalid-base64".into();
++        assert!(image_response(value).is_err());
++        let mut value = make();
++        value.byte_length += 1;
++        assert!(image_response(value).is_err());
++        let mut value = make();
++        value.byte_length = 0;
++        assert!(image_response(value).is_err());
++    }
++    #[test]
++    fn short_pages_are_allowed_after_settling() {
++        let page = Snapshot {
++            ready: true,
++            body: "<html>tiny</html>".into(),
++            text_length: 4,
++            ..Default::default()
++        };
++        assert!(!snapshot_ready(
++            &page,
++            Duration::from_secs(3),
++            Duration::from_secs(2)
++        ));
++        assert!(snapshot_ready(
++            &page,
++            Duration::from_secs(12),
++            Duration::from_secs(2)
++        ));
++    }
++    #[test]
++    fn challenge_or_loading_pages_are_not_ready() {
++        let page = Snapshot {
++            ready: true,
++            body: "<html/>".into(),
++            blocked: "CAPTCHA".into(),
++            article: true,
++            ..Default::default()
++        };
++        assert!(!snapshot_ready(
++            &page,
++            Duration::from_secs(20),
++            Duration::from_secs(2)
++        ));
++    }
++    #[test]
++    fn callback_json_shapes_and_job_ids() {
++        assert!(
++            parse_snapshot(r#"{"ready":true,"textLength":8}"#)
++                .unwrap()
++                .ready
++        );
++        assert!(parse_snapshot(r#""{\"ready\":true}""#).unwrap().ready);
++        assert!(!valid_job_id("../main"));
++        assert!(is_acquisition_webview("subscription-render-aabbccdd"));
++        assert!(!is_acquisition_webview("main"));
++        assert!(valid_job_id("aabbccdd-0011-2233-4455-667788990011"));
++    }
++}
+diff --git a/apps/desktop/src/components/shell/ActivityBar.tsx b/apps/desktop/src/components/shell/ActivityBar.tsx
+index cd04cd86..a8cdca6c 100644
+--- a/apps/desktop/src/components/shell/ActivityBar.tsx
++++ b/apps/desktop/src/components/shell/ActivityBar.tsx
+@@ -139,6 +139,7 @@ export function ActivityBar({ activePanel, onPanelChange }: ActivityBarProps) {
+           title={p.title}
+         >
+           {p.icon}
++          {!!p.badge && <span style={{ position: 'absolute', top: 2, right: 2, minWidth: 12, height: 12, padding: '0 2px', borderRadius: 6, background: 'var(--acc, #6366f1)', color: '#fff', fontSize: 9, lineHeight: '12px', textAlign: 'center', pointerEvents: 'none' }}>{p.badge > 99 ? '99+' : p.badge}</span>}
+         </button>
+       ))}
+ 
+diff --git a/apps/desktop/src/services/editorIoService.ts b/apps/desktop/src/services/editorIoService.ts
+index ea5230f2..4c9f59d8 100644
+--- a/apps/desktop/src/services/editorIoService.ts
++++ b/apps/desktop/src/services/editorIoService.ts
+@@ -64,7 +64,11 @@ async function writeRawContent(filePath: string, content: string): Promise<void>
+ }
+ 
+ /** Open a file from the vault (reads content via VaultStore). */
+-export async function openFile(filePath: string, name: string): Promise<void> {
++export async function openFile(filePath: string, name: string, options?: { expectedVaultId: string; readText: () => Promise<string> }): Promise<void> {
++  const assertVault = () => {
++    if (options && (useVaultStore.getState().isLoading || useVaultStore.getState().activeVaultId !== options.expectedVaultId)) throw new Error('The selected vault has changed');
++  };
++  assertVault();
+   const get = useEditorStore.getState;
+   const set = useEditorStore.setState;
+   // External files are vault-independent: their tab id is namespaced `ext:` so
+@@ -90,7 +94,8 @@ export async function openFile(filePath: string, name: string): Promise<void> {
+     if (!existing.content && getHandlerById(correctFileType)?.needsFileContent) {
+       try {
+         const handler = getHandlerById(correctFileType);
+-        const raw = await readRawContent(filePath);
++        const raw = await (options ? options.readText() : readRawContent(filePath));
++        assertVault();
+         const content = handler?.deserialize ? handler.deserialize(raw) : raw;
+         set((state) => ({
+           tabs: state.tabs.map((t) =>
+@@ -100,6 +105,7 @@ export async function openFile(filePath: string, name: string): Promise<void> {
+         }));
+       } catch (err) {
+         console.error('[EditorStore] Failed to reload content for existing tab:', err);
++        assertVault();
+         set((state) => ({
+           activeTabId: existing.id,
+           ...(needsFileTypeUpdate || needsActivityUpdate
+@@ -133,10 +139,12 @@ export async function openFile(filePath: string, name: string): Promise<void> {
+     const handler = getHandlerById(fileType);
+     let content = '';
+     if (handler?.needsFileContent) {
+-      const raw = await readRawContent(filePath);
++      const raw = await (options ? options.readText() : readRawContent(filePath));
++      assertVault();
+       content = handler.deserialize ? handler.deserialize(raw) : raw;
+       console.log(`[EditorStore] openFile: ${filePath} type=${fileType} content=${content.length} chars`);
+     }
++    assertVault();
+     const newTab: FileTab = {
+       id: tabId,
+       name,
+@@ -161,6 +169,7 @@ export async function openFile(filePath: string, name: string): Promise<void> {
+     }
+   } catch (err) {
+     console.error('[EditorStore] openFile failed:', err);
++    if (options) throw err;
+   } finally {
+     set({ isFileLoading: false });
+   }
+diff --git a/apps/desktop/src/services/extension-host/createExtensionApi.ts b/apps/desktop/src/services/extension-host/createExtensionApi.ts
+index 1e598c54..76962d72 100644
+--- a/apps/desktop/src/services/extension-host/createExtensionApi.ts
++++ b/apps/desktop/src/services/extension-host/createExtensionApi.ts
+@@ -37,6 +37,7 @@ import { registerFileTypeHandler, resolveDefault } from '@/components/file-types
+ import { buildExtensionAi } from './aiCapability';
+ import { buildExtensionEnv, disposeExtensionEnv } from './envCapability';
+ import { buildExtensionHttp } from './httpCapability';
++import { buildSubscriptions, disposeSubscriptions } from './subscriptionsCapability';
+ import type { Disposable as Disp } from 'folyn-extension-sdk';
+ import { useVaultStore } from '@/store/vaultStore';
+ import { useVaultConfigStore } from '@/store/vaultConfigStore';
+@@ -249,6 +250,7 @@ const noopCommands = {
+ // capability = add a factory + one registerCapability line. The createApi hook
+ // (App.tsx) calls createExtensionApi → buildExtensionApi; the hook remains the
+ // whole-Api override escape hatch for tests / alternate shells.
++registerCapability({ slot: 'subscriptions', build: buildSubscriptions, dispose: disposeSubscriptions });
+ registerCapability({ slot: 'vault', build: () => createVaultApi() });
+ registerCapability({ slot: 'vaultConfig', build: () => createVaultConfigApi() });
+ registerCapability({ slot: 'storage', build: (m) => createStorageApi(m) });
+diff --git a/apps/desktop/src/services/extension-host/aiCapability.ts b/apps/desktop/src/services/extension-host/aiCapability.ts
+index cc889108..b01c9d94 100644
+--- a/apps/desktop/src/services/extension-host/aiCapability.ts
++++ b/apps/desktop/src/services/extension-host/aiCapability.ts
+@@ -102,6 +102,7 @@ export function buildExtensionAi(manifest: ExtensionManifest): ExtensionAiCapabi
+         await runRigChat({
+           sessionId: params.sessionId,
+           prompt: params.prompt,
++          ...(params.persistHistory === false ? { historyMode: 'none' as const } : {}),
+           provider: cfg.provider,
+           model: cfg.model,
+           apiKey: cfg.apiKey,
+diff --git a/apps/desktop/src/services/extension-host/aiCapability.test.ts b/apps/desktop/src/services/extension-host/aiCapability.test.ts
+index a778b66e..6f55d558 100644
+--- a/apps/desktop/src/services/extension-host/aiCapability.test.ts
++++ b/apps/desktop/src/services/extension-host/aiCapability.test.ts
+@@ -167,6 +167,16 @@ describe('buildExtensionAi / ai.chat', () => {
+     expect(params.provider).toBe('anthropic');
+     expect(params.model).toBe('sonnet');
+     expect(params.apiKey).toBe('sk-test');
++    expect(runRigChatMock.mock.calls[0][0]).not.toHaveProperty('historyMode');
++  });
++
++  it('skips host history for independent tasks without changing the selected pair', async () => {
++    const ai = buildExtensionAi(manifest({ permissions: { ai: { chat: true } } }));
++    await ai.chat({ sessionId: 'article-fragment', prompt: 'translate', persistHistory: false, provider: 'openai', model: 'gpt-x', onEvent: vi.fn() });
++    expect(runRigChatMock).toHaveBeenCalledWith(expect.objectContaining({
++      historyMode: 'none', sessionId: 'article-fragment', provider: 'openai', model: 'gpt-x', apiKey: 'sk-oai',
++    }));
++    expect(aiStoreMock.createSession).not.toHaveBeenCalled();
+   });
+ 
+   it('routes stream to aiStore when useSharedSession=true', async () => {
+diff --git a/apps/desktop/src/services/extension-host/rpcBridge.ts b/apps/desktop/src/services/extension-host/rpcBridge.ts
+index c25f805e..65ee4216 100644
+--- a/apps/desktop/src/services/extension-host/rpcBridge.ts
++++ b/apps/desktop/src/services/extension-host/rpcBridge.ts
+@@ -810,8 +810,8 @@ export async function dispatchExtensionRpc(
+       if (!perms?.ai?.chat) {
+         throw new Error('ai:chat denied: permissions.ai.chat not granted');
+       }
+-      const { sessionId, prompt, provider, model, images } = (params ?? {}) as {
+-        sessionId?: string; prompt?: string; provider?: string; model?: string;
++      const { sessionId, prompt, provider, model, images, persistHistory } = (params ?? {}) as {
++        sessionId?: string; prompt?: string; provider?: string; model?: string; persistHistory?: boolean;
+         images?: { data?: unknown; mediaType?: unknown }[];
+       };
+       if (typeof sessionId !== 'string' || typeof prompt !== 'string') {
+@@ -841,6 +841,7 @@ export async function dispatchExtensionRpc(
+       const rigParams = {
+         sessionId,
+         prompt,
++        ...(persistHistory === false ? { historyMode: 'none' as const } : {}),
+         provider: cfg.provider,
+         model: cfg.model,
+         apiKey: cfg.apiKey,
+diff --git a/apps/desktop/src/services/extension-host/rpcBridge.test.ts b/apps/desktop/src/services/extension-host/rpcBridge.test.ts
+index 93bc1997..ec662956 100644
+--- a/apps/desktop/src/services/extension-host/rpcBridge.test.ts
++++ b/apps/desktop/src/services/extension-host/rpcBridge.test.ts
+@@ -580,6 +580,16 @@ describe('dispatchExtensionRpc / ai:chat', () => {
+     expect(runRigChatMock).not.toHaveBeenCalled();
+   });
+ 
++  it('forwards history-free background chat without changing provider/model', async () => {
++    const manifest = sandboxManifest({ permissions: { ai: { chat: true } } });
++    await dispatchExtensionRpc(manifest, 'demo', 'ai:chat', {
++      sessionId: 'article-fragment', prompt: 'translate', persistHistory: false,
++    }, async (p) => p, () => {});
++    expect(runRigChatMock).toHaveBeenCalledWith(expect.objectContaining({
++      sessionId: 'article-fragment', historyMode: 'none', provider: 'anthropic', model: 'sonnet', apiKey: 'sk-test',
++    }));
++  });
++
+   it('returns { jobId } and streams deltas via ai:chat-poll (tool-window fetch path)', async () => {
+     const manifest = sandboxManifest({ permissions: { ai: { chat: true } } });
+     runRigChatMock.mockImplementation(async (p: { onEvent: (e: { type: string; content?: string }) => void }) => {
+diff --git a/apps/desktop/src/services/extension-host/subscriptionsCapability.ts b/apps/desktop/src/services/extension-host/subscriptionsCapability.ts
+new file mode 100644
+index 00000000..f1149eda
+--- /dev/null
++++ b/apps/desktop/src/services/extension-host/subscriptionsCapability.ts
+@@ -0,0 +1,162 @@
++import type { ExtensionManifest, ExtensionSubscriptions, ExtensionVaultSession, ExtensionVaultFileChange, ExtensionHttpResponse } from 'folyn-extension-sdk';
++import { invoke, convertFileSrc } from '@tauri-apps/api/core';
++import { listen } from '@tauri-apps/api/event';
++import { useVaultStore } from '@/store/vaultStore';
++import { useNavStore } from '@/store/navStore';
++import { useExtensionPageStore } from '@/store/extensionPageStore';
++import { useFeaturePanelStore } from '@/store/featurePanelStore';
++import { resolveBasePath } from '@/utils/pathResolver';
++import { openFile } from '@/services/editorIoService';
++import { onVaultFileChange } from './subscriptionsFileEvents';
++
++const teardowns = new WeakMap<ExtensionSubscriptions, () => void>();
++function relativePath(path: string): string {
++  if (!path || path.startsWith('/') || path.includes('\\') || path.includes(':') || path.split('/').some(p => p === '..' || p === '.')) {
++    throw new Error('Subscription paths must be relative to the selected vault');
++  }
++  return path;
++}
++export function buildSubscriptions(manifest: ExtensionManifest): ExtensionSubscriptions | undefined {
++  if (manifest.tier !== 'trusted' || manifest.permissions?.subscriptions?.vault !== true || manifest.permissions.subscriptions.network !== true) return undefined;
++  const disposers = new Set<() => void>();
++  let closed = false;
++  let session: ExtensionVaultSession | null = null;
++  let identity = '';
++  let badge = 0;
++  const renderRequests = new Set<string>();
++  const changeHandlers = new Set<(s: ExtensionVaultSession | null) => void>();
++  const fileHandlers = new Set<(e: ExtensionVaultFileChange) => void>();
++  let rootPromise: Promise<string> | null = null;
++  const sync = () => {
++    const state = useVaultStore.getState();
++    const vault = state.isLoading ? null : state.currentVault;
++    const next = vault && (vault.providerType === 'tauri' || vault.providerType === 'github') ? `${vault.id}:${vault.basePath}` : '';
++    if (next === identity) return;
++    identity = next;
++    if (!vault || !next) { session = null; rootPromise = null; }
++    else {
++      const capturedId = vault.id;
++      const capturedRoot = resolveBasePath(vault.basePath).then(v => v.replace(/[\\/]+$/, ''));
++      rootPromise = capturedRoot;
++      const assertCurrent = () => {
++        if (closed || useVaultStore.getState().currentVault?.id !== capturedId || identity !== next) throw new Error('The selected vault has changed');
++      };
++      const io = async <T>(operation: string, path: string, content?: string): Promise<T> => {
++        if (closed) throw new Error('Subscriptions extension is inactive');
++        relativePath(path);
++        return invoke<T>('subscription_vault_io', { extensionId: manifest.id, root: await capturedRoot, path, operation, content: content ?? null });
++      };
++      const snapshot: ExtensionVaultSession = {
++        id: capturedId, name: vault.name,
++        readText: path => io<string>('readText', path),
++        async readBinary(path) { return Uint8Array.from(atob(await io<string>('readBinary', path)), c => c.charCodeAt(0)); },
++        async writeText(path, content) { await io('writeText',path,content); },
++        async writeBinary(path, content) {
++          let value = ''; for (const byte of content) value += String.fromCharCode(byte);
++          await io('writeBinary',path,btoa(value));
++        },
++        async createText(path, content) {
++          await io('createText',path,content);
++          if (useVaultStore.getState().currentVault?.id === capturedId) void useVaultStore.getState().refreshFileTree();
++        },
++        exists: path => io<boolean>('exists',path),
++        async remove(path) { await io('remove',path); },
++        async assetUrl(path) { return convertFileSrc(`${await capturedRoot}/${relativePath(path)}`); },
++        async open(path) {
++          assertCurrent();
++          const content = await snapshot.readText(path);
++          assertCurrent();
++          await openFile(relativePath(path), path.split('/').pop() || path, { expectedVaultId: capturedId, readText: async () => content });
++          assertCurrent();
++          useNavStore.getState().setCurrentPage('editor');
++        },
++        async chooseDirectory() {
++          assertCurrent();
++          const { open } = await import('@tauri-apps/plugin-dialog');
++          const root = await capturedRoot;
++          const picked = await open({ directory: true, multiple: false, defaultPath: root });
++          assertCurrent();
++          if (!picked || Array.isArray(picked)) return null;
++          const normalized = picked.replace(/\\/g, '/').replace(/\/+$/, '');
++          const base = root.replace(/\\/g, '/');
++          if (normalized === base) return '.';
++          if (!normalized.startsWith(`${base}/`)) throw new Error('Choose a directory inside the selected vault');
++          return relativePath(normalized.slice(base.length + 1));
++        },
++      };
++      session = snapshot;
++    }
++    for (const cb of changeHandlers) { try { cb(session); } catch (e) { console.error('[subscriptions] vault listener failed',e); } }
++  };
++  sync();
++  disposers.add(useVaultStore.subscribe(sync));
++  const publish = (event: ExtensionVaultFileChange) => {
++    if (closed) return;
++    for (const cb of fileHandlers) { try { cb(event); } catch (e) { console.error('[subscriptions] file listener failed',e); } }
++  };
++  disposers.add(onVaultFileChange(publish));
++  void listen<{ type: string; root: string; paths: string[] }>('app://vault-watcher-event', async ({ payload }) => {
++    const captured = session;
++    const pendingRoot = rootPromise;
++    if (!captured || !pendingRoot) return;
++    const root = (await pendingRoot).replace(/\\/g, '/');
++    if (closed || session !== captured || payload.root?.replace(/\\/g, '/').replace(/\/+$/, '') !== root) return;
++    const paths = payload.paths.map(p => p.replace(/\\/g, '/')).filter(p => p.startsWith(`${root}/`)).map(p => p.slice(root.length + 1));
++    if (payload.type.includes('Name(Both)') && paths.length >= 2) publish({ vaultId: captured.id, path: paths[0], newPath: paths[1] });
++    else if (payload.type.includes('Remove')) for (const path of paths) publish({ vaultId: captured.id, path, deleted: true });
++  }).then(stop => { if (closed) stop(); else disposers.add(stop); }).catch(e => console.error('[subscriptions] watcher unavailable',e));
++  const applyBadge = () => {
++    for (const page of manifest.contributes?.pages ?? []) useExtensionPageStore.getState().setBadge(`ext:${manifest.id}.${page.id}`, badge);
++    for (const feature of manifest.contributes?.features ?? []) useFeaturePanelStore.getState().setBadge(feature.id, badge);
++  };
++  // Activation can set the badge before contribution adapters register pages.
++  disposers.add(useExtensionPageStore.subscribe((state, prev) => { if (state.pages.length !== prev.pages.length) applyBadge(); }));
++  const api: ExtensionSubscriptions = {
++    ...(manifest.permissions.subscriptions.render === true ? {
++      async render(url: string): Promise<ExtensionHttpResponse & { url: string }> {
++        if (closed) throw new Error('Subscriptions extension is inactive');
++        const requestId = crypto.randomUUID();
++        renderRequests.add(requestId);
++        try {
++          const result = await invoke<ExtensionHttpResponse & { url: string }>('subscription_render', { extensionId: manifest.id, requestId, url });
++          if (closed) throw new Error('Subscriptions extension is inactive');
++          return result;
++        } finally { renderRequests.delete(requestId); }
++      },
++    } : {}),
++    current: () => session,
++    onChange(handler) { changeHandlers.add(handler); return { dispose: () => { changeHandlers.delete(handler); } }; },
++    onFileChange(handler) { fileHandlers.add(handler); return { dispose: () => { fileHandlers.delete(handler); } }; },
++    async openExternal(url) {
++      const parsed = new URL(url);
++      if (!['https:', 'http:'].includes(parsed.protocol) || parsed.username || parsed.password) throw new Error('Only HTTP(S) URLs are supported');
++      const { openUrl } = await import('@tauri-apps/plugin-opener');
++      await openUrl(parsed.href);
++    },
++    openSettings() { const nav = useNavStore.getState(); nav.setSettingsTab('models'); nav.setCurrentPage('settings'); },
++    openVaults() { useNavStore.getState().setCurrentPage('vault'); },
++    setBadge(value) { badge = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0; applyBadge(); },
++    async fetch(url,binary = false) {
++      if (closed) throw new Error('Subscriptions extension is inactive');
++      const requestId = binary && manifest.permissions?.subscriptions?.render === true ? crypto.randomUUID() : null;
++      if (requestId) renderRequests.add(requestId);
++      try {
++        const result = await invoke<ExtensionHttpResponse & { url: string }>('subscription_fetch', { extensionId: manifest.id, url, binary, requestId });
++        if (closed) throw new Error('Subscriptions extension is inactive');
++        return result;
++      } finally { if (requestId) renderRequests.delete(requestId); }
++    },
++  };
++  teardowns.set(api, () => {
++    closed = true;
++    const pending = [...renderRequests];
++    for (let offset = 0; offset < pending.length; offset += 32) {
++      void invoke('subscription_cancel_renders', { extensionId: manifest.id, requestIds: pending.slice(offset, offset + 32) }).catch(() => {});
++    }
++    renderRequests.clear();
++    for (const dispose of disposers) dispose();
++    changeHandlers.clear(); fileHandlers.clear(); badge = 0; applyBadge();
++  });
++  return api;
++}
++export function disposeSubscriptions(api: ExtensionSubscriptions | undefined): void { if (api) teardowns.get(api)?.(); }
+diff --git a/apps/desktop/src/services/extension-host/subscriptionsCapability.test.ts b/apps/desktop/src/services/extension-host/subscriptionsCapability.test.ts
+new file mode 100644
+index 00000000..cc36470f
+--- /dev/null
++++ b/apps/desktop/src/services/extension-host/subscriptionsCapability.test.ts
+@@ -0,0 +1,97 @@
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++const mocks = vi.hoisted(() => ({
++  invoke: vi.fn(), open: vi.fn(), choose: vi.fn(),
++  state: { currentVault: { id: 'a', name: 'A', basePath: '/vault-a', providerType: 'tauri' }, activeVaultId: 'a', isLoading: false, refreshFileTree: vi.fn() },
++  listeners: new Set<() => void>(),
++}));
++vi.mock('@tauri-apps/api/core', () => ({ invoke: mocks.invoke, convertFileSrc: (p: string) => `asset:${p}` }));
++vi.mock('@tauri-apps/plugin-dialog', () => ({ open: mocks.choose }));
++vi.mock('@tauri-apps/api/event', () => ({ listen: async () => () => {} }));
++vi.mock('@/store/vaultStore', () => ({ useVaultStore: { getState: () => mocks.state, subscribe: (cb: () => void) => { mocks.listeners.add(cb); return () => mocks.listeners.delete(cb); } } }));
++vi.mock('@/utils/pathResolver', () => ({ resolveBasePath: async (p: string) => p }));
++vi.mock('@/services/editorIoService', () => ({ openFile: mocks.open }));
++import { buildSubscriptions, disposeSubscriptions } from './subscriptionsCapability';
++import type { ExtensionManifest } from 'folyn-extension-sdk';
++const manifest: ExtensionManifest = { id: 'test-subscriptions', name: 'Test', version: '0.1.0', tier: 'trusted', main: 'index.js', permissions: { subscriptions: { vault: true, network: true } } };
++function changeVault() { mocks.state.currentVault = { id: 'b', name: 'B', basePath: '/vault-b', providerType: 'tauri' }; mocks.state.activeVaultId = 'b'; for (const cb of mocks.listeners) cb(); }
++beforeEach(() => {
++  mocks.state.currentVault = { id: 'a', name: 'A', basePath: '/vault-a', providerType: 'tauri' }; mocks.state.activeVaultId = 'a'; mocks.state.isLoading = false;
++  mocks.invoke.mockReset(); mocks.invoke.mockResolvedValue('content'); mocks.open.mockReset(); mocks.choose.mockReset();
++});
++describe('subscription vault snapshots', () => {
++  it('exposes the capability only to trusted extensions with both explicit grants', () => {
++    expect(buildSubscriptions({ ...manifest, permissions: {} })).toBeUndefined();
++    expect(buildSubscriptions({ ...manifest, tier: 'sandbox' })).toBeUndefined();
++  });
++  it('keeps an in-flight save pinned to the old root after a vault switch', async () => {
++    const api = buildSubscriptions(manifest)!;
++    const old = api.current()!;
++    const pending = old.createText('Articles/story.md', 'saved');
++    changeVault();
++    await pending;
++    expect(mocks.invoke).toHaveBeenCalledWith('subscription_vault_io', expect.objectContaining({ root: '/vault-a', operation: 'createText', path: 'Articles/story.md' }));
++    expect(api.current()?.id).toBe('b');
++    await expect(old.open('Articles/story.md')).rejects.toThrow('vault has changed');
++    expect(mocks.open).not.toHaveBeenCalled();
++    disposeSubscriptions(api);
++  });
++  it('stops scheduling as soon as a vault transition starts and cleans up listeners', () => {
++    const api = buildSubscriptions(manifest)!; const cb = vi.fn(); api.onChange(cb);
++    mocks.state.isLoading = true; for (const cb of mocks.listeners) cb();
++    expect(api.current()).toBeNull(); expect(cb).toHaveBeenCalledWith(null);
++    disposeSubscriptions(api); expect(mocks.listeners.size).toBe(0);
++  });
++  it('exposes rendered acquisition only with an explicit grant and cancels pending work on disposal', async () => {
++    const denied = buildSubscriptions(manifest)!;
++    expect(denied.render).toBeUndefined(); disposeSubscriptions(denied);
++    const granted = buildSubscriptions({ ...manifest, permissions: { subscriptions: { vault: true, network: true, render: true } } })!;
++    let finish: (value: unknown) => void = () => {};
++    mocks.invoke.mockImplementation((command: string) => command === 'subscription_render' ? new Promise(resolve => { finish = resolve; }) : Promise.resolve());
++    const pending = granted.render!('https://example.com/blog');
++    expect(mocks.invoke).toHaveBeenCalledWith('subscription_render', expect.objectContaining({ extensionId: manifest.id, url: 'https://example.com/blog', requestId: expect.any(String) }));
++    disposeSubscriptions(granted);
++    expect(mocks.invoke).toHaveBeenCalledWith('subscription_cancel_renders', expect.objectContaining({ extensionId: manifest.id, requestIds: [expect.any(String)] }));
++    finish({ status: 200, headers: {}, body: '<html>rendered</html>', url: 'https://example.com/blog' });
++    await expect(pending).rejects.toThrow('inactive');
++  });
++  it('tracks image requests for native fallback cancellation and rejects late results after disposal', async () => {
++    const granted = buildSubscriptions({ ...manifest, permissions: { subscriptions: { vault: true, network: true, render: true } } })!;
++    let finish: (value: unknown) => void = () => {};
++    mocks.invoke.mockImplementation((command: string) => command === 'subscription_fetch' ? new Promise(resolve => { finish = resolve; }) : Promise.resolve());
++    const pending = granted.fetch('https://example.com/image.png', true);
++    expect(mocks.invoke).toHaveBeenCalledWith('subscription_fetch', expect.objectContaining({ binary: true, requestId: expect.any(String) }));
++    disposeSubscriptions(granted);
++    expect(mocks.invoke).toHaveBeenCalledWith('subscription_cancel_renders', expect.objectContaining({ requestIds: [expect.any(String)] }));
++    finish({ status: 200, headers: { 'content-type': 'image/png' }, body: 'aW1hZ2U=', url: 'https://example.com/image.png' });
++    await expect(pending).rejects.toThrow('inactive');
++  });
++  it('does not enable browser fallback IDs without the separate render grant', async () => {
++    const api = buildSubscriptions(manifest)!;
++    await api.fetch('https://example.com/image.png', true);
++    expect(mocks.invoke).toHaveBeenCalledWith('subscription_fetch', expect.objectContaining({ requestId: null }));
++    disposeSubscriptions(api);
++  });
++  it('returns the root directory marker and rejects directories outside the vault', async () => {
++    const api = buildSubscriptions(manifest)!;
++    mocks.choose.mockResolvedValue('/vault-a');
++    expect(await api.current()!.chooseDirectory()).toBe('.');
++    mocks.choose.mockResolvedValue('/vault-a/Articles');
++    expect(await api.current()!.chooseDirectory()).toBe('Articles');
++    mocks.choose.mockResolvedValue('/vault-ab/Articles');
++    await expect(api.current()!.chooseDirectory()).rejects.toThrow('inside');
++    disposeSubscriptions(api);
++  });
++  it('does not claim durable support for unimplemented remote providers', () => {
++    mocks.state.currentVault.providerType = 's3';
++    const api = buildSubscriptions(manifest)!;
++    expect(api.current()).toBeNull();
++    disposeSubscriptions(api);
++  });
++  it('rejects path escape and no longer fetches after disposal', async () => {
++    const api = buildSubscriptions(manifest)!;
++    await expect(api.current()!.readText('../escape')).rejects.toThrow('relative');
++    expect(mocks.invoke).not.toHaveBeenCalled();
++    disposeSubscriptions(api);
++    await expect(api.fetch('https://example.com')).rejects.toThrow('inactive');
++  });
++});
+diff --git a/apps/desktop/src/services/extension-host/subscriptionsFileEvents.ts b/apps/desktop/src/services/extension-host/subscriptionsFileEvents.ts
+new file mode 100644
+index 00000000..4814b1ed
+--- /dev/null
++++ b/apps/desktop/src/services/extension-host/subscriptionsFileEvents.ts
+@@ -0,0 +1,10 @@
++import type { ExtensionVaultFileChange } from 'folyn-extension-sdk';
++const handlers = new Set<(event: ExtensionVaultFileChange) => void>();
++/** Emits only after the host filesystem operation succeeded. */
++export function emitVaultFileChange(event: ExtensionVaultFileChange): void {
++  for (const handler of handlers) { try { handler(event); } catch (e) { console.error('[vault-files] listener failed', e); } }
++}
++export function onVaultFileChange(handler: (event: ExtensionVaultFileChange) => void): () => void {
++  handlers.add(handler);
++  return () => { handlers.delete(handler); };
++}
+diff --git a/apps/desktop/src/store/extensionPageStore.ts b/apps/desktop/src/store/extensionPageStore.ts
+index 5ac4a450..a8e39ea1 100644
+--- a/apps/desktop/src/store/extensionPageStore.ts
++++ b/apps/desktop/src/store/extensionPageStore.ts
+@@ -31,6 +31,7 @@ export interface PageEntry {
+   component: ComponentType;
+   /** Sort key among extension page-nav buttons. */
+   order: number;
++  badge?: number;
+ }
+ 
+ interface ExtensionPageState {
+@@ -40,6 +41,7 @@ interface ExtensionPageState {
+   register: (entry: PageEntry) => void;
+   /** Unregister a page by id. If it was the current page, the adapter falls back to 'editor'. */
+   unregister: (id: string) => void;
++  setBadge: (id: string, badge: number) => void;
+ }
+ 
+ export const useExtensionPageStore = create<ExtensionPageState>((set, get) => ({
+@@ -58,6 +60,11 @@ export const useExtensionPageStore = create<ExtensionPageState>((set, get) => ({
+     set({ pages: [...get().pages, entry] });
+   },
+ 
++  setBadge: (id, badge) => {
++    if (!get().pages.some(p => p.id === id && p.badge !== badge)) return;
++    set({ pages: get().pages.map(p => p.id === id ? { ...p, badge } : p) });
++  },
++
+   unregister: (id) => {
+     set({ pages: get().pages.filter((p) => p.id !== id) });
+   },
+diff --git a/apps/desktop/src/store/extensionStore.ts b/apps/desktop/src/store/extensionStore.ts
+index d504d2b0..8d845d47 100644
+--- a/apps/desktop/src/store/extensionStore.ts
++++ b/apps/desktop/src/store/extensionStore.ts
+@@ -423,6 +423,10 @@ function parsePermissionLines(manifest: {
+   if (perms) {
+     if (perms.fs) out.push('文件读写（受限于插件数据目录）');
+     if (perms.http) out.push('网络请求（受限于声明的 origin 白名单）');
++    if (perms.subscriptions) {
++      out.push('订阅：读写选定知识库、访问任意公开 HTTP(S) 网站并下载图片（二进制）');
++      if (typeof perms.subscriptions === 'object' && perms.subscriptions !== null && 'render' in perms.subscriptions && perms.subscriptions.render === true) out.push('订阅网页渲染：在独立隐私浏览器中执行公开网站脚本以提取内容');
++    }
+     if (perms.clipboard) out.push('剪贴板读写');
+     if (perms.dialog) out.push('文件对话框');
+     if (perms.window) out.push('打开工具窗口');
+diff --git a/apps/desktop/src/store/featurePanelStore.ts b/apps/desktop/src/store/featurePanelStore.ts
+index 3094affd..be7ba193 100644
+--- a/apps/desktop/src/store/featurePanelStore.ts
++++ b/apps/desktop/src/store/featurePanelStore.ts
+@@ -52,6 +52,7 @@ interface FeaturePanelState {
+   /** Update a panel's sort key. Used by registerBuiltinPanels to re-sort
+    *  Wiki by enable timestamp when its flag flips on. */
+   setOrder: (id: string, order: number) => void;
++  setBadge: (id: string, badge: number) => void;
+ }
+ 
+ export const useFeaturePanelStore = create<FeaturePanelState>((set, get) => ({
+@@ -84,6 +85,11 @@ export const useFeaturePanelStore = create<FeaturePanelState>((set, get) => ({
+       panels: get().panels.map((p) => (p.id === id ? { ...p, visible } : p)),
+     }),
+ 
++  setBadge: (id, badge) => {
++    if (!get().panels.some(p => p.id === id && p.badge !== badge)) return;
++    set({ panels: get().panels.map(p => p.id === id ? { ...p, badge: badge || undefined } : p) });
++  },
++
+   setOrder: (id, order) =>
+     set({
+       panels: get().panels.map((p) => (p.id === id ? { ...p, order } : p)),
+diff --git a/apps/desktop/src/store/vaultStore.ts b/apps/desktop/src/store/vaultStore.ts
+index 4ae2bd8b..94fc5084 100644
+--- a/apps/desktop/src/store/vaultStore.ts
++++ b/apps/desktop/src/store/vaultStore.ts
+@@ -1,4 +1,5 @@
+ import { create } from 'zustand';
++import { emitVaultFileChange } from '@/services/extension-host/subscriptionsFileEvents';
+ import {
+   VaultManager,
+   VaultProviderRegistry,
+@@ -471,7 +472,9 @@ export const useVaultStore = create<VaultState>()(
+         },
+ 
+         deleteFile: async (filePath) => {
++          const vaultId = get().activeVaultId;
+           await get().manager.deleteFile(filePath);
++          if (vaultId) emitVaultFileChange({ vaultId, path: filePath, deleted: true });
+           suppressWatcherFor(filePath);
+           set((state) => ({ fileTree: removeEntry(state.fileTree, filePath) }));
+           void get().refreshFileTree();
+@@ -485,14 +488,18 @@ export const useVaultStore = create<VaultState>()(
+         },
+ 
+         deleteDir: async (dirPath) => {
++          const vaultId = get().activeVaultId;
+           await get().manager.deleteDir(dirPath);
++          if (vaultId) emitVaultFileChange({ vaultId, path: dirPath, deleted: true });
+           suppressWatcherFor(dirPath);
+           set((state) => ({ fileTree: removeEntry(state.fileTree, dirPath) }));
+           void get().refreshFileTree();
+         },
+ 
+         renameFile: async (oldPath, newPath) => {
++          const vaultId = get().activeVaultId;
+           await get().manager.rename(oldPath, newPath);
++          if (vaultId) emitVaultFileChange({ vaultId, path: oldPath, newPath });
+           suppressWatcherFor(oldPath);
+           suppressWatcherFor(newPath);
+           // Rewrite any open tab whose path was the renamed file or lived under
+@@ -505,6 +512,7 @@ export const useVaultStore = create<VaultState>()(
+ 
+         moveFiles: async (paths, targetDir) => {
+           const manager = get().manager;
++          const vaultId = get().activeVaultId;
+ 
+           const movedMap: [string, string][] = [];
+ 
+@@ -519,6 +527,7 @@ export const useVaultStore = create<VaultState>()(
+             try {
+               await manager.rename(srcPath, destPath);
+               movedMap.push([srcPath, destPath]);
++              if (vaultId) emitVaultFileChange({ vaultId, path: srcPath, newPath: destPath });
+             } catch (err) {
+               console.error('[VaultStore] moveFiles rename failed:', srcPath, '→', destPath, err);
+             }
+diff --git a/packages/extension-sdk/index.ts b/packages/extension-sdk/index.ts
+index 54c003e2..4730cc1b 100644
+--- a/packages/extension-sdk/index.ts
++++ b/packages/extension-sdk/index.ts
+@@ -72,6 +72,9 @@ export type {
+   FileTypeRegistryApi,
+   ExporterRegistryApi,
+   ExtensionApi,
++  ExtensionSubscriptions,
++  ExtensionVaultSession,
++  ExtensionVaultFileChange,
+   ExtensionLogger,
+   DialogApi,
+   NotificationApi,
+diff --git a/packages/extension-sdk/src/types.ts b/packages/extension-sdk/src/types.ts
+index 81f9cf74..1c77d460 100644
+--- a/packages/extension-sdk/src/types.ts
++++ b/packages/extension-sdk/src/types.ts
+@@ -92,6 +92,9 @@ export interface ExtensionManifest {
+ //     ever gains enforcement, but do not rely on them to confine trusted code.
+ 
+ export interface ExtensionPermissions {
++  /** Trusted subscriptions: pinned local vault access and public HTTP(S)
++   * text/binary downloads. Explicitly consented with the trusted extension. */
++  subscriptions?: { vault: boolean; network: boolean; render?: boolean };
+   fs?: { scope: string[] };
+   http?: { origins: string[] };
+   clipboard?: boolean;
+@@ -183,6 +186,9 @@ export interface ExtensionAiChatParams {
+   /** When true, the host also surfaces the turn in aiPanel (aiStore session).
+    * Defaults to false (extension-only, not in UI). */
+   useSharedSession?: boolean;
++  /** False skips loading and saving host chat history for independent tasks
++   * such as article fragments. Omitted/true preserves normal history. */
++  persistHistory?: boolean;
+   /** Optional pair override from {@link ExtensionAiCapability.pairs}. Omitted →
+    * the host's extensionPair (Extensions Settings) default. The provider slot
+    * must exist and be configured, else the call rejects. */
+diff --git a/packages/extension-sdk/src/extension.ts b/packages/extension-sdk/src/extension.ts
+index 276d5f44..197b19f3 100644
+--- a/packages/extension-sdk/src/extension.ts
++++ b/packages/extension-sdk/src/extension.ts
+@@ -9,7 +9,7 @@
+  */
+ 
+ import type { Disposable } from './Disposable';
+-import type { ExtensionManifest, ExtensionAiCapability, ExtensionEnv, ExtensionHttpCapability } from './types';
++import type { ExtensionManifest, ExtensionAiCapability, ExtensionEnv, ExtensionHttpCapability, ExtensionHttpResponse } from './types';
+ import type { ExportService } from './export-service';
+ 
+ // ── Extension entry (doc §4.1) ──────────────────────────────────────────────
+@@ -257,7 +257,48 @@ export interface ExporterRegistryApi {
+   list(fileType?: string): unknown[];
+ }
+ 
++/** A snapshot pinned to one local vault root; paths are always relative. */
++export interface ExtensionVaultSession {
++  id: string;
++  name: string;
++  readText(path: string): Promise<string>;
++  readBinary(path: string): Promise<Uint8Array>;
++  writeText(path: string, content: string): Promise<void>;
++  writeBinary(path: string, content: Uint8Array): Promise<void>;
++  /** Publishes complete content atomically and never replaces an existing file. */
++  createText(path: string, content: string): Promise<void>;
++  exists(path: string): Promise<boolean>;
++  /** Removes a file or directory tree; succeeds when absent. Rejects symlinks
++   * in the requested path. Links inside a removed tree are never followed. */
++  remove(path: string): Promise<void>;
++  assetUrl(path: string): Promise<string>;
++  /** Rejects if this session is no longer the active vault. */
++  open(path: string): Promise<void>;
++  chooseDirectory(): Promise<string | null>;
++}
++export interface ExtensionVaultFileChange {
++  vaultId: string;
++  path: string;
++  newPath?: string;
++  deleted?: boolean;
++}
++export interface ExtensionSubscriptions {
++  /** Isolated public-page DOM acquisition. Available only with the explicit
++   * subscriptions.render grant. Synthetic status 200 denotes a DOM snapshot. */
++  render?(url: string): Promise<ExtensionHttpResponse & { url: string }>;
++  current(): ExtensionVaultSession | null;
++  onChange(handler: (session: ExtensionVaultSession | null) => void): Disposable;
++  onFileChange(handler: (event: ExtensionVaultFileChange) => void): Disposable;
++  openExternal(url: string): Promise<void>;
++  openSettings(): void;
++  openVaults(): void;
++  setBadge(value: number): void;
++  /** Binary bodies are base64 encoded; url is the final redirected URL. */
++  fetch(url: string, binary?: boolean): Promise<ExtensionHttpResponse & { url: string }>;
++}
++
+ export interface ExtensionApi {
++  readonly subscriptions?: ExtensionSubscriptions;
+   readonly vault: VaultApi;
+   readonly vaultConfig: VaultConfigApi;
+   readonly files: FileApi;
+diff --git a/packages/extension-sdk/src/defineExtension.ts b/packages/extension-sdk/src/defineExtension.ts
+index 2551ef59..137d8068 100644
+--- a/packages/extension-sdk/src/defineExtension.ts
++++ b/packages/extension-sdk/src/defineExtension.ts
+@@ -31,6 +31,12 @@ export function validateManifest(manifest: ExtensionManifest): void {
+   if (manifest.tier === 'sandbox' && !manifest.html) {
+     throw new Error('sandbox extensions require manifest.html');
+   }
++  if (manifest.permissions?.subscriptions !== undefined) {
++    const permission = manifest.permissions.subscriptions;
++    if (manifest.tier !== 'trusted' || !permission || typeof permission !== 'object' || typeof permission.vault !== 'boolean' || typeof permission.network !== 'boolean' || (permission.render !== undefined && typeof permission.render !== 'boolean')) {
++      throw new Error('permissions.subscriptions requires a trusted extension and boolean vault/network grants');
++    }
++  }
+   if (manifest.permissions?.ai) {
+     const { chat, agents, edit } = manifest.permissions.ai;
+     if (chat !== undefined && typeof chat !== 'boolean') {
+diff --git a/packages/extension-sdk/docs/extension-development.md b/packages/extension-sdk/docs/extension-development.md
+index 7ccbc703..08b2165c 100644
+--- a/packages/extension-sdk/docs/extension-development.md
++++ b/packages/extension-sdk/docs/extension-development.md
+@@ -1472,3 +1472,23 @@ real marketplace exists with a concrete publisher-identity need.
+ 
+ Install any via Settings → Extensions → 从文件夹安装… to manually QA the full
+ pipeline.
++
++## Trusted subscriptions capability
++
++`permissions.subscriptions: { vault: true, network: true }` enables optional `api.subscriptions` for approved trusted extensions. This grant explicitly includes read/write access to the selected local or GitHub vault and arbitrary public HTTP(S) text and binary downloads. Sandbox extensions cannot use it.
++
++`current()` returns an `ExtensionVaultSession` pinned to a physical root. Relative paths reject traversal and symlinks. `createText` atomically publishes complete, synced content without replacing an existing path, including concurrent creates. `writeText`/`writeBinary` atomically replace. Vault switching immediately emits `null` during transition, then the new snapshot; old in-flight IO continues against its captured root. `open` refuses stale sessions. `chooseDirectory` only accepts a directory inside the snapshot root.
++
++`fetch(url, binary?)` returns `{ status, headers, body, url }`; `url` is the final redirect destination and binary bodies are base64. Requests have a 30-second overall timeout, at most 8 redirects, and 8 MiB text / 20 MiB binary limits. Each redirect is resolved and pinned to public IPs, with proxy use disabled; credentials, private/local addresses and non-HTTP(S) URLs are rejected.
++
++`onFileChange` receives host move/delete operations and native watcher paired-rename/remove events with `{ vaultId, path, newPath?, deleted? }`. Some filesystem watchers emit unpaired rename events; these cannot reliably infer the new path. `setBadge` updates the extension page/panel count. Dispose unsubscribes host listeners and clears the badge.
++
++`ExtensionAiChatParams.persistHistory?: boolean` controls host chat-session history. Pass `false` for independent article translations or summaries to forward `historyMode: 'none'` (neither load nor save global host chat files). Omitted/true retains the existing history behavior. Provider/model selection and `useSharedSession` UI behavior are unchanged; leave shared sessions disabled for background fragment jobs. Supported by trusted capability and sandbox RPC.
++
++### Public rendered-page acquisition
++
++Declare `permissions.subscriptions.render: true` to expose optional `api.subscriptions.render(url)`. It returns `{ status, headers, body, url }` with a serialized DOM, final URL, synthetic status 200 and `x-folyn-rendered` / `x-folyn-status-unavailable` headers. Main HTTP status is not exposed by Tauri's browser API. Incognito acquisition uses a separate temporary profile, no existing user cookies, no app IPC, no downloads or new windows. Executable scripts/event handlers are removed from the snapshot; inert JSON/LD+JSON scripts and XML document roots remain available for extraction. It never clicks, logs in or solves verification.
++
++The renderer permits one concurrent page, at most 28 seconds overall, 12 navigation retries and an 8 MiB UTF-8 snapshot. It checks stable DOM/text/link dimensions for at least 1.5 seconds after initial hydration, triggers at most four viewport scroll steps, and accepts useful short pages after 12 seconds. Visible verification/password gates, timeout, excessive size/navigation, cancellation and unsupported webviews return explicit errors. Extension disposal cancels outstanding jobs and closes isolated windows; profile cleanup retries after native handle release.
++
++Direct HTTP keeps resolved public IP pinning, redirects and no-proxy behavior. It now uses browser-compatible request headers and bounded gzip/brotli/deflate decoding, BOM/header/XML/meta charset decoding, and gzip magic sniffing for text `.xml.gz` sitemaps missing Content-Encoding. Unknown content encodings reject. The isolated browser follows operating-system proxy settings. Its engine owns socket DNS and subresource loading: the host validates public HTTP(S) main-navigation DNS but cannot pin browser DNS or intercept every subresource through Tauri. Proxies which replace public DNS answers with private/fake IPs are rejected by that validation. Neither direct HTTP guards nor private-address restrictions are bypassed.
+diff --git a/packages/extension-sdk/docs/extension-development.zh.md b/packages/extension-sdk/docs/extension-development.zh.md
+index 5fa39849..19acbb8d 100644
+--- a/packages/extension-sdk/docs/extension-development.zh.md
++++ b/packages/extension-sdk/docs/extension-development.zh.md
+@@ -1253,3 +1253,23 @@ MVP：**未打包的文件夹**。安装命令把包含 `manifest.json` + 资源
+   纯 ESM，无 JSX、无打包步骤。
+ 
+ 任一都通过 Settings → Extensions → 从文件夹安装… 装，手动 QA 全流程。
++
++## Trusted subscriptions capability
++
++`permissions.subscriptions: { vault: true, network: true }` enables optional `api.subscriptions` for approved trusted extensions. This grant explicitly includes read/write access to the selected local or GitHub vault and arbitrary public HTTP(S) text and binary downloads. Sandbox extensions cannot use it.
++
++`current()` returns an `ExtensionVaultSession` pinned to a physical root. Relative paths reject traversal and symlinks. `createText` atomically publishes complete, synced content without replacing an existing path, including concurrent creates. `writeText`/`writeBinary` atomically replace. Vault switching immediately emits `null` during transition, then the new snapshot; old in-flight IO continues against its captured root. `open` refuses stale sessions. `chooseDirectory` only accepts a directory inside the snapshot root.
++
++`fetch(url, binary?)` returns `{ status, headers, body, url }`; `url` is the final redirect destination and binary bodies are base64. Requests have a 30-second overall timeout, at most 8 redirects, and 8 MiB text / 20 MiB binary limits. Each redirect is resolved and pinned to public IPs, with proxy use disabled; credentials, private/local addresses and non-HTTP(S) URLs are rejected.
++
++`onFileChange` receives host move/delete operations and native watcher paired-rename/remove events with `{ vaultId, path, newPath?, deleted? }`. Some filesystem watchers emit unpaired rename events; these cannot reliably infer the new path. `setBadge` updates the extension page/panel count. Dispose unsubscribes host listeners and clears the badge.
++
++`ExtensionAiChatParams.persistHistory?: boolean` controls host chat-session history. Pass `false` for independent article translations or summaries to forward `historyMode: 'none'` (neither load nor save global host chat files). Omitted/true retains the existing history behavior. Provider/model selection and `useSharedSession` UI behavior are unchanged; leave shared sessions disabled for background fragment jobs. Supported by trusted capability and sandbox RPC.
++
++### Public rendered-page acquisition
++
++Declare `permissions.subscriptions.render: true` to expose optional `api.subscriptions.render(url)`. It returns `{ status, headers, body, url }` with a serialized DOM, final URL, synthetic status 200 and `x-folyn-rendered` / `x-folyn-status-unavailable` headers. Main HTTP status is not exposed by Tauri's browser API. Incognito acquisition uses a separate temporary profile, no existing user cookies, no app IPC, no downloads or new windows. Executable scripts/event handlers are removed from the snapshot; inert JSON/LD+JSON scripts and XML document roots remain available for extraction. It never clicks, logs in or solves verification.
++
++The renderer permits one concurrent page, at most 28 seconds overall, 12 navigation retries and an 8 MiB UTF-8 snapshot. It checks stable DOM/text/link dimensions for at least 1.5 seconds after initial hydration, triggers at most four viewport scroll steps, and accepts useful short pages after 12 seconds. Visible verification/password gates, timeout, excessive size/navigation, cancellation and unsupported webviews return explicit errors. Extension disposal cancels outstanding jobs and closes isolated windows; profile cleanup retries after native handle release.
++
++Direct HTTP keeps resolved public IP pinning, redirects and no-proxy behavior. It now uses browser-compatible request headers and bounded gzip/brotli/deflate decoding, BOM/header/XML/meta charset decoding, and gzip magic sniffing for text `.xml.gz` sitemaps missing Content-Encoding. Unknown content encodings reject. The isolated browser follows operating-system proxy settings. Its engine owns socket DNS and subresource loading: the host validates public HTTP(S) main-navigation DNS but cannot pin browser DNS or intercept every subresource through Tauri. Proxies which replace public DNS answers with private/fake IPs are rejected by that validation. Neither direct HTTP guards nor private-address restrictions are bypassed.
+diff --git a/packages/extension-sdk/docs/extension-sdk-reference.md b/packages/extension-sdk/docs/extension-sdk-reference.md
+index 7b190973..8af30ae2 100644
+--- a/packages/extension-sdk/docs/extension-sdk-reference.md
++++ b/packages/extension-sdk/docs/extension-sdk-reference.md
+@@ -593,3 +593,23 @@ trusted 加载器把 `main` 包成 blob URL 后 `import()`，blob URL 无路径
+ - `../examples/extensions/markdown-table` — sandbox；`tools` + `vault:insert-content` RPC。
+ - `../extensions/extension-graphviz` — trusted；`fileTypes` + `containers`，Vite 打包。
+ - `../../extensions/file-collector` — trusted；活动采集器标杆（`collectors` + `activityDisplay` + `entityTypes`，poll 模式快照 diff 游标 + authSchema 配置）。
++
++## Trusted subscriptions capability
++
++`permissions.subscriptions: { vault: true, network: true }` enables optional `api.subscriptions` for approved trusted extensions. This grant explicitly includes read/write access to the selected local or GitHub vault and arbitrary public HTTP(S) text and binary downloads. Sandbox extensions cannot use it.
++
++`current()` returns an `ExtensionVaultSession` pinned to a physical root. Relative paths reject traversal and symlinks. `createText` atomically publishes complete, synced content without replacing an existing path, including concurrent creates. `writeText`/`writeBinary` atomically replace. Vault switching immediately emits `null` during transition, then the new snapshot; old in-flight IO continues against its captured root. `open` refuses stale sessions. `chooseDirectory` only accepts a directory inside the snapshot root.
++
++`fetch(url, binary?)` returns `{ status, headers, body, url }`; `url` is the final redirect destination and binary bodies are base64. Requests have a 30-second overall timeout, at most 8 redirects, and 8 MiB text / 20 MiB binary limits. Each redirect is resolved and pinned to public IPs, with proxy use disabled; credentials, private/local addresses and non-HTTP(S) URLs are rejected.
++
++`onFileChange` receives host move/delete operations and native watcher paired-rename/remove events with `{ vaultId, path, newPath?, deleted? }`. Some filesystem watchers emit unpaired rename events; these cannot reliably infer the new path. `setBadge` updates the extension page/panel count. Dispose unsubscribes host listeners and clears the badge.
++
++`ExtensionAiChatParams.persistHistory?: boolean` controls host chat-session history. Pass `false` for independent article translations or summaries to forward `historyMode: 'none'` (neither load nor save global host chat files). Omitted/true retains the existing history behavior. Provider/model selection and `useSharedSession` UI behavior are unchanged; leave shared sessions disabled for background fragment jobs. Supported by trusted capability and sandbox RPC.
++
++### Public rendered-page acquisition
++
++Declare `permissions.subscriptions.render: true` to expose optional `api.subscriptions.render(url)`. It returns `{ status, headers, body, url }` with a serialized DOM, final URL, synthetic status 200 and `x-folyn-rendered` / `x-folyn-status-unavailable` headers. Main HTTP status is not exposed by Tauri's browser API. Incognito acquisition uses a separate temporary profile, no existing user cookies, no app IPC, no downloads or new windows. Executable scripts/event handlers are removed from the snapshot; inert JSON/LD+JSON scripts and XML document roots remain available for extraction. It never clicks, logs in or solves verification.
++
++The renderer permits one concurrent page, at most 28 seconds overall, 12 navigation retries and an 8 MiB UTF-8 snapshot. It checks stable DOM/text/link dimensions for at least 1.5 seconds after initial hydration, triggers at most four viewport scroll steps, and accepts useful short pages after 12 seconds. Visible verification/password gates, timeout, excessive size/navigation, cancellation and unsupported webviews return explicit errors. Extension disposal cancels outstanding jobs and closes isolated windows; profile cleanup retries after native handle release.
++
++Direct HTTP keeps resolved public IP pinning, redirects and no-proxy behavior. It now uses browser-compatible request headers and bounded gzip/brotli/deflate decoding, BOM/header/XML/meta charset decoding, and gzip magic sniffing for text `.xml.gz` sitemaps missing Content-Encoding. Unknown content encodings reject. The isolated browser follows operating-system proxy settings. Its engine owns socket DNS and subresource loading: the host validates public HTTP(S) main-navigation DNS but cannot pin browser DNS or intercept every subresource through Tauri. Proxies which replace public DNS answers with private/fake IPs are rejected by that validation. Neither direct HTTP guards nor private-address restrictions are bypassed.

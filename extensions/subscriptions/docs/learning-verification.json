@@ -1,0 +1,102 @@
+{
+  "version": "0.0.1",
+  "pluginTests": {
+    "passed": 217,
+    "skipped": 1,
+    "filesPassed": 28,
+    "scope": "Full current extension suite, including question selection snapshots, retry and real Reader UI handoff regressions."
+  },
+  "hostFocusedTests": {
+    "passed": 40,
+    "files": 3,
+    "scope": "previous 0.4.0 host change; no host source changed in 0.4.1"
+  },
+  "sdk": "typecheck and package build passed",
+  "bundle": {
+    "entries": [
+      "manifest.json",
+      "index.js"
+    ],
+    "sha256": "77aaca2efa4a97ea09a2720a88ae109d691909e7434d821d6e860513cb66b608",
+    "bytes": 142982,
+    "matchesDist": true
+  },
+  "browser": "0.5.1 production bundle/mock AI/in-memory Vault: desktop1440px, expanded source/list/reader headers36px with bottom72px; reader/learning headers also align. Native drag→记想法 twice preserves existing note and reference stays closed. Wide-table fixture scrolls331px within660px container, no page overflow.",
+  "hostPatch": "applied to sibling Folyn repository and tested there",
+  "nativeAcceptance": "not complete; real AI, installed Folyn workflow and process restart pending",
+  "firstUse": {
+    "entry": "Reader book icon, no sidebar learning entry; headers now36px (39px for coarse pointers to fit existing32px tools).",
+    "questionCard": "Three compact rows adjacent to composer; presets only fill editable text, no implicit AI; typing leaves layout stable",
+    "handoff": "Selecting记想法 opens existing notes directly and appends the quote, places caret on a blank line at the end, and does not open the reference card. Draft and existing saved-note association preserved; existing file changes only via explicit save.",
+    "theme": "Inherits host tokens and --font-ui; unchanged from0.4.1",
+    "browser": "Browser rechecked saved-note reopen and repeated selection while notes already open: referenceOpen=false, focused=true, caret=length; original content retained and two excerpts present. Earlier dark/narrow flow checks belong to previous versions.",
+    "rendering": "AI deltas only notify learning panel; unchanged answer HTML memoized"
+  },
+  "selectionPopup": {
+    "anchor": "mouse release client coordinates; keyboard fallback uses active selection end",
+    "layout": "measure actual popup size before paint; flip left/above near reader/viewport edges; scroll dismisses popup",
+    "regression": "Existing Reader selection workflow reproduced failure x50 vs expected>=230 before fix; now verifies pointer adjacency, bottom/right avoidance, mouseup-before-click stability and quote handoff",
+    "screenshot": "learning-selection-pointer.jpg"
+  },
+  "layout": {
+    "headerHeight": 36,
+    "headerBottom": 72,
+    "normalTable": {
+      "containerWidth": 760,
+      "tableWidth": 760,
+      "columnWidth": 759
+    },
+    "wideTable": {
+      "columns": 30,
+      "containerWidth": 660,
+      "scrollWidth": 991,
+      "scrollLeftAfterWheel": 331,
+      "pageOverflow": false
+    },
+    "screenshot": "learning-continue-note.jpg"
+  },
+  "currentTargetedTests": {
+    "passed": 31,
+    "filesPassed": 2,
+    "typecheck": "passed"
+  },
+  "sourceDeduplication": {
+    "browser": "0.5.2 production bundle with mock host:two native drag selections from same article retain one source URL in draft and save preview; editor remains focused after second selection.",
+    "screenshot": "learning-source-once.jpg",
+    "scope": "Prevents newly generated duplicate source metadata; existing user draft and saved file contents are not rewritten."
+  },
+  "sourceFooter": {
+    "browser": "0.5.3 production bundle mock host:two native selections, typed thought at positioned caret; save preview places source below both excerpts and thought.",
+    "screenshot": "learning-source-footer.jpg"
+  },
+  "versionChange": "Version metadata reset to0.0.1; implementation unchanged from verified0.5.3.",
+  "thoughtSeparator": {
+    "tests": "31 related tests passed; typecheck and package passed",
+    "browser": "Production bundle mock host:two native selections with typed thought; exactly one Markdown separator between entries, single source remains at bottom.",
+    "screenshot": "learning-thought-separator.jpg"
+  },
+  "discussionDirect": {
+    "tests": "31 related tests passed; typecheck and package passed",
+    "browser": "Production bundle/mock host:selection→追问 directly focuses question; referenceOpen=false,quoteOpen=false; label=针对选段提问. Reference remains available on explicit click.",
+    "screenshot": "learning-discussion-direct.jpg"
+  },
+  "questionSelection": {
+    "cause": "Quote was only nested in general reference materials; questions had no immutable selection snapshot or explicit prompt target. Chat did not render quoted passage.",
+    "fix": "Persist selection snapshot with user message, explicitly bind selected-passage to vague question; keep per-question quote on retry and include it in bounded discussion history. Compact composer reference and inline quoted user message, no auto-open reference card.",
+    "tests": "Regression failed before fix. Full suite217 passed1 skipped; typecheck and package passed.",
+    "browser": "Production bundle/mock AI:drag selection→追问→为什么要这么说→send. User message shows exact passage above question, reference remains collapsed. No real AI call performed.",
+    "screenshot": "learning-question-selection.jpg"
+  },
+  "inputResize": {
+    "browser": "Production bundle computed resize:none for question input; native resize grip disabled across extension textareas.",
+    "screenshot": "learning-input-no-resize.jpg",
+    "validation": "package build passed; CSS-only change, previous217-test suite not rerun"
+  },
+  "guidanceFocus": {
+    "browser": "Production bundle:guidance textarea focused; border1px,outline1px,inset offset-1px,boxShadow none.",
+    "screenshot": "learning-guidance-focus.jpg",
+    "validation": "CSS-only;package build and browser computed style verified",
+    "resize": "none;explicit component selector and browser computed style verified"
+  },
+  "releaseValidation": "0.0.1 release rebuild: typecheck passed; root manifest and bundle equality verified; full suite rerun for release."
+}

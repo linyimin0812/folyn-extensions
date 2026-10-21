@@ -1,0 +1,50 @@
+{
+  "capturedAt": "2026-10-18T04:07:49.898Z",
+  "transport": "Node HTTP adapter; production parser/acquisition; no native renderer in this test",
+  "results": [
+    {
+      "url": "https://www.ruanyifeng.com/blog/",
+      "success": true,
+      "strategy": "html",
+      "source": "https://www.ruanyifeng.com/blog/index.html",
+      "entries": 10,
+      "article": "https://www.ruanyifeng.com/blog/2026/10/weekly-issue-415.html",
+      "characters": 5955,
+      "blocks": 183,
+      "elapsedMs": 9355
+    },
+    {
+      "url": "https://danluu.com/",
+      "success": true,
+      "strategy": "feed",
+      "source": "https://danluu.com/atom.xml",
+      "entries": 128,
+      "article": "https://danluu.com/brain-off/",
+      "characters": 17506,
+      "blocks": 6,
+      "elapsedMs": 10535
+    },
+    {
+      "url": "https://antirez.com/",
+      "success": true,
+      "strategy": "feed",
+      "source": "https://antirez.com/rss",
+      "entries": 100,
+      "article": "http://antirez.com/news/172",
+      "characters": 6074,
+      "blocks": 3,
+      "elapsedMs": 32222
+    },
+    {
+      "url": "https://martinfowler.com/",
+      "success": true,
+      "strategy": "html",
+      "source": "https://martinfowler.com/",
+      "entries": 2,
+      "article": "https://martinfowler.com/bliki/HeavyCardboard.html",
+      "characters": 1323,
+      "blocks": 3,
+      "elapsedMs": 3216
+    }
+  ]
+}

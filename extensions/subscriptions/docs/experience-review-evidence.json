@@ -1,0 +1,58 @@
+{
+  "date": "2026-10-18",
+  "version": "0.3.4",
+  "scope": "production service/Repository/SiteReader, in-memory Vault and HTTP fixtures, simulated write error; no product code changes",
+  "command": "PATH=/Users/yiminlin/.nvm/versions/node/v25.9.0/bin:$PATH pnpm exec vitest run test/flow-audit-diagnostic.test.ts --reporter=verbose",
+  "diagnostic_tests": {
+    "passed": 2,
+    "temporary_test_removed": true
+  },
+  "write_failure": {
+    "rejected": false,
+    "memoryName": "Unsaved new source name",
+    "diskName": "Original source name",
+    "globalError": "数据未写入：diagnostic simulated Vault write failure"
+  },
+  "history_refresh": [
+    {
+      "step": "historyCursor=null; refresh(source,true)",
+      "fetches": 0,
+      "articles": 2
+    },
+    {
+      "step": "same service; refresh(source)",
+      "fetches": 0,
+      "articles": 2
+    },
+    {
+      "step": "switch Vault away and back; refresh(source)",
+      "fetches": 0,
+      "articles": 2
+    },
+    {
+      "step": "new service activation; refresh(source)",
+      "fetches": 1,
+      "articles": 3
+    },
+    {
+      "step": "independent clean service control; refresh(source)",
+      "fetches": 1,
+      "articles": 3
+    }
+  ],
+  "ui_checks": {
+    "desktop_viewport": [
+      1280,
+      800
+    ],
+    "original_viewport": [
+      766,
+      954
+    ],
+    "search_empty": "no matches -> Add source; Unread -> no unread; View all preserves query and remains empty",
+    "group_navigation": "group label toggles only; small source count filters articles",
+    "image_viewer": "Escape closes, no visible close button, Tab focus outside viewer",
+    "cache_copy": "24 images /4MB /16MB remains in settings while implementation uses8MB /64MB without image count cap",
+    "viewport_restored": true
+  }
+}

@@ -1,0 +1,102 @@
+.lp { --lp-bg:#fff; --lp-panel:#f6f7f9; --lp-ink:#29303a; --lp-muted:#687180; --lp-line:#e8eaee; --lp-accent:#42638c; --lp-selected:#eef3f9; color:var(--lp-ink); background:var(--lp-bg); font:12px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif; color-scheme:light; min-width:0 }
+.lp.dark { --lp-bg:#1c1e23; --lp-panel:#23262c; --lp-ink:#e4e7ec; --lp-muted:#a0a8b5; --lp-line:#353940; --lp-accent:#9ebbe0; --lp-selected:#2b3645; color-scheme:dark }
+body:has(.lp-switcher) #vault-a,body:has(.lp-switcher) #vault-b { display:none }
+body:has(.lp.dark) #testbar { background:#23262c; color:#a0a8b5 }
+body:has(.lp.dark) #activity-bar { background:#1c1e23; color:#9ebbe0; border-color:#353940 }
+.lp * { box-sizing:border-box }
+.lp button { font:inherit; cursor:pointer; border-radius:5px; color:inherit; min-height:28px }
+.lp button:disabled { opacity:.45; cursor:default }
+.lp button:hover { background:var(--lp-panel) }
+.lp :focus-visible { outline:2px solid var(--lp-accent); outline-offset:2px }
+.lp button,.lp summary { -webkit-user-select:none; user-select:none }
+.lp h2 { font-size:13px; font-weight:600; line-height:1.5 }
+.lp h3 { font-size:13px; font-weight:600 }
+.lp p { margin:0 }
+.lp small,.lp-muted { font-size:11px; color:var(--lp-muted) }
+.lp .lp-icon { display:inline-flex; align-items:center; justify-content:center; min-width:28px; min-height:28px; padding:4px; flex:0 0 auto }
+.lp .lp-button,.lp .lp-primary { display:inline-flex; align-items:center; justify-content:center; gap:5px; padding:5px 9px; border:1px solid var(--lp-line); background:var(--lp-bg); font-size:11px; border-radius:5px }
+.lp .lp-primary { color:var(--lp-bg); background:var(--lp-accent); border-color:var(--lp-accent) }
+.lp .lp-primary:hover { filter:brightness(.96); background:var(--lp-accent) }
+.lp .lp-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; border-bottom:1px solid var(--lp-line) }
+.lp .lp-heading>div { min-width:0 }
+.lp .lp-heading h2 { overflow:hidden; white-space:nowrap; text-overflow:ellipsis }
+.lp-eyebrow { font-size:10px; letter-spacing:.08em; color:var(--lp-muted); display:block; margin-bottom:2px }
+.lp-side { flex:0 0 370px; width:370px; min-height:0; overflow:hidden; display:flex; flex-direction:column; border-inline-start:1px solid var(--lp-line); padding-bottom:53px }
+.lp-side-body { display:flex; flex-direction:column; flex:1; min-height:0; padding:12px 14px; gap:10px; overflow-y:auto; scrollbar-gutter:stable }
+.lp-tabbar { display:flex; gap:16px; border-bottom:1px solid var(--lp-line); padding:0 14px; flex-shrink:0 }
+.lp-tabbar button { min-height:35px; border-radius:0; color:var(--lp-muted); border-bottom:2px solid transparent; padding:0 2px; font-weight:500 }
+.lp-tabbar button[aria-pressed=true] { color:var(--lp-accent); border-color:var(--lp-accent) }
+.lp-source { border:1px solid var(--lp-line); border-radius:6px; padding:7px 9px; background:var(--lp-panel); flex-shrink:0 }
+.lp-source summary { display:flex; gap:6px; align-items:center; color:var(--lp-muted); font-size:11px; cursor:pointer; list-style:none }
+.lp-source summary span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.lp-source blockquote { font-size:12px; line-height:1.8; padding:8px 0; color:var(--lp-ink) }
+.lp-source .lp-button { min-height:24px; font-size:10px; padding:2px 6px }
+.lp-materials { display:flex; flex-wrap:wrap; align-items:center; gap:5px; flex-shrink:0 }
+.lp-material { display:inline-flex; align-items:center; gap:4px; background:var(--lp-selected); color:var(--lp-accent); border:1px solid var(--lp-line); padding:0 5px; border-radius:4px; font-size:11px }
+.lp-material .lp-icon { min-width:24px; min-height:24px; padding:0 }
+.lp-conversation { flex:1; min-height:170px; overflow-y:auto; overscroll-behavior:contain; padding:2px 0 }
+.lp-empty { margin:auto 0; padding:35px 8px 25px; color:var(--lp-muted); text-align:start }
+.lp-empty>svg { color:var(--lp-accent); margin-bottom:12px }
+.lp-empty h3 { color:var(--lp-ink); margin-bottom:6px }
+.lp-empty p { line-height:1.8; margin-bottom:14px }
+.lp-empty .lp-button { text-align:start; white-space:normal; justify-content:flex-start }
+.lp-message { padding:10px 0 13px; line-height:1.9; font-size:12px }
+.lp-message.user { padding:9px 10px; border-radius:6px; background:var(--lp-panel); margin:8px 0 }
+.lp-message small { display:block; margin-bottom:4px; font-size:10px; color:var(--lp-muted) }
+.lp-message p { white-space:pre-wrap; overflow-wrap:anywhere }
+.lp-response-actions { display:flex; flex-wrap:wrap; gap:6px; margin:5px 0 }
+.lp-response-actions .lp-button { font-size:10px; padding:3px 7px }
+.lp-scene { display:flex; gap:5px; flex-shrink:0 }
+.lp-scene button { min-height:26px; padding:3px 9px; border:1px solid var(--lp-line); border-radius:5px; font-size:11px; color:var(--lp-muted) }
+.lp-scene button[aria-pressed=true] { color:var(--lp-accent); border-color:var(--lp-line); background:var(--lp-selected) }
+.lp-composer { border:1px solid var(--lp-line); border-radius:7px; padding:8px 9px; background:var(--lp-bg); flex-shrink:0 }
+.lp-composer label { display:block; font-size:10px; color:var(--lp-muted); margin-bottom:4px }
+.lp-composer textarea { width:100%; min-height:64px; resize:vertical; background:transparent; border:0; font-size:12px; line-height:1.7; padding:0; color:var(--lp-ink) }
+.lp-composer>div { display:flex; justify-content:space-between; gap:6px; align-items:center; margin-top:7px }
+.lp-composer small { font-size:9px }
+.lp-status { font-size:10px; padding:7px 14px; border-top:1px solid var(--lp-line); color:var(--lp-muted); min-height:30px; flex-shrink:0 }
+.lp-draft { display:flex; flex-direction:column; gap:8px; flex:1; min-height:0 }
+.lp-draft-intro { padding:10px 0 5px }
+.lp-draft-intro p { color:var(--lp-muted); font-size:11px; margin-top:3px }
+.lp-draft label { font-size:11px; color:var(--lp-muted) }
+.lp-draft textarea { width:100%; flex:1; min-height:220px; border:1px solid var(--lp-line); border-radius:6px; padding:11px; background:var(--lp-bg); font-size:12px; line-height:1.9; color:var(--lp-ink); resize:vertical }
+.lp-draft>.lp-primary { align-self:flex-end; margin-top:5px }
+.lp-saved { color:var(--lp-accent); font-size:11px }
+.lp-notebook-host { flex:1; min-height:0; overflow:hidden }
+.reader:has(.lp-notebook-host)>.reader-scroll { display:none }
+.lp-selection { position:fixed; z-index:120; border:1px solid var(--lp-line); box-shadow:0 5px 20px #1823321c; border-radius:7px; padding:3px; display:flex; gap:2px }
+.lp-selection button { padding:5px 13px; min-height:30px; font-size:12px }
+.lp-switcher { position:fixed; z-index:150; bottom:12px; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:6px; padding:6px 9px; border:1px solid var(--lp-line); border-radius:10px; box-shadow:0 4px 20px #14213720; white-space:nowrap }
+.lp-switcher>span { min-width:110px; text-align:center; line-height:1.45; padding:0 5px }
+.lp-switcher b { display:block; font-size:11px; font-weight:600 }
+.lp-switcher small { display:block; font-size:9px }
+.lp-switcher .lp-next svg { transform:rotate(180deg) }
+.lp-switcher .lp-button { min-height:29px; padding:3px 7px }
+.lp-state { position:fixed; z-index:151; bottom:72px; left:50%; transform:translateX(-50%); width:min(720px,calc(100vw - 28px)); max-height:60vh; overflow:auto; padding:14px; border:1px solid var(--lp-line); box-shadow:0 4px 20px #14213720; border-radius:8px; font:11px/1.8 ui-monospace,monospace; white-space:pre-wrap; overflow-wrap:anywhere }
+.lp-source-mark { background:#42638c15; border-radius:4px }
+.lp-dialog { position:fixed; inset:0; margin:auto; width:min(590px,calc(100vw - 28px)); max-height:calc(100vh - 50px); overflow:auto; padding:18px; border:1px solid var(--lp-line); border-radius:12px; box-shadow:0 20px 70px #141c3333; overscroll-behavior:contain }
+.lp-dialog::backdrop { background:#18223245 }
+.lp-dialog>header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding-bottom:12px }
+.lp-dialog>p { margin-bottom:8px }
+.lp-dialog>footer { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-top:16px; padding-top:12px; border-top:1px solid var(--lp-line) }
+.lp-note-options { display:flex; flex-direction:column; gap:4px; margin:10px 0 }
+.lp-note-options button { display:flex; align-items:center; gap:9px; width:100%; min-height:54px; padding:9px 11px; border:1px solid var(--lp-line); border-radius:6px; text-align:start }
+.lp-note-options button>span { flex:1; min-width:0 }
+.lp-note-options button b,.lp-note-options button small { display:block }
+.lp-note-options button b { font-size:12px; font-weight:500 }
+.lp-note-options button[aria-pressed=true] { background:var(--lp-selected); border-color:var(--lp-line); color:var(--lp-accent) }
+.lp-note-options.compact { max-height:130px; overflow-y:auto }
+.lp-note-options.compact button { min-height:35px; padding:5px 9px }
+.lp-destination { display:flex; gap:5px; margin-bottom:12px }
+.lp-destination button { padding:5px 12px; border:1px solid var(--lp-line) }
+.lp-destination button[aria-pressed=true] { background:var(--lp-selected); color:var(--lp-accent) }
+.lp-field { display:flex; flex-direction:column; gap:6px; font-size:11px; color:var(--lp-muted); margin-top:12px }
+.lp-field input,.lp-field textarea { width:100%; background:var(--lp-bg); color:var(--lp-ink); border:1px solid var(--lp-line); border-radius:6px; padding:9px 10px; font-size:12px; line-height:1.8 }
+.lp-field input { min-height:36px }
+.lp-organize-content { min-height:160px; resize:vertical }
+.lp-existing-preview { margin-top:10px; color:var(--lp-muted); font-size:11px }
+.lp-existing-preview summary { cursor:pointer }
+.lp-existing-preview pre { white-space:pre-wrap; padding:10px; background:var(--lp-panel); margin-top:6px }
+.lp-note-editor { min-height:340px; resize:vertical }
+@media(max-width:1000px) { .lp-side { position:fixed; z-index:60; right:0; top:36px; bottom:0; width:min(390px,100vw); box-shadow:-12px 0 40px #16213620; padding-bottom:70px } }
+@media(max-width:600px) { .lp-notebook-host { padding-bottom:64px } .lp-switcher { bottom:8px; gap:2px; padding:5px 6px; max-width:calc(100vw - 16px) } .lp-switcher>span { min-width:98px } .lp-switcher .lp-button { font-size:10px; padding:3px 5px } .lp-dialog { padding:14px } }

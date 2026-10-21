@@ -1,0 +1,325 @@
+{
+  "version": "0.1.1",
+  "environment": "Chromium, packaged dist/index.js with host Flex shell and base resets, mock Vault and AI",
+  "before": {
+    "rootWidth": 0,
+    "dialogPosition": [
+      0,
+      0
+    ]
+  },
+  "layout": [
+    {
+      "list": {
+        "display": "flex",
+        "height": 708,
+        "width": 320
+      },
+      "nav": {
+        "display": "block",
+        "height": 708,
+        "width": 220
+      },
+      "overflow": false,
+      "reader": {
+        "display": "flex",
+        "height": 708,
+        "width": 698
+      },
+      "root": {
+        "display": "flex",
+        "height": 764,
+        "width": 1238
+      },
+      "topbar": {
+        "display": "flex",
+        "height": 56,
+        "width": 1238
+      },
+      "viewport": 1280
+    },
+    {
+      "list": {
+        "display": "flex",
+        "height": 708,
+        "width": 320
+      },
+      "nav": {
+        "display": "none",
+        "height": 0,
+        "width": 0
+      },
+      "overflow": false,
+      "reader": {
+        "display": "flex",
+        "height": 708,
+        "width": 638
+      },
+      "root": {
+        "display": "flex",
+        "height": 764,
+        "width": 958
+      },
+      "topbar": {
+        "display": "flex",
+        "height": 56,
+        "width": 958
+      },
+      "viewport": 1000
+    },
+    {
+      "list": {
+        "display": "flex",
+        "height": 708,
+        "width": 798
+      },
+      "nav": {
+        "display": "none",
+        "height": 0,
+        "width": 0
+      },
+      "overflow": false,
+      "reader": {
+        "display": "none",
+        "height": 0,
+        "width": 0
+      },
+      "root": {
+        "display": "flex",
+        "height": 764,
+        "width": 798
+      },
+      "topbar": {
+        "display": "flex",
+        "height": 56,
+        "width": 798
+      },
+      "viewport": 840
+    },
+    {
+      "list": {
+        "display": "flex",
+        "height": 708,
+        "width": 678
+      },
+      "nav": {
+        "display": "none",
+        "height": 0,
+        "width": 0
+      },
+      "overflow": false,
+      "reader": {
+        "display": "none",
+        "height": 0,
+        "width": 0
+      },
+      "root": {
+        "display": "flex",
+        "height": 764,
+        "width": 678
+      },
+      "topbar": {
+        "display": "flex",
+        "height": 56,
+        "width": 678
+      },
+      "viewport": 720
+    },
+    {
+      "list": {
+        "display": "flex",
+        "height": 632.703125,
+        "width": 348
+      },
+      "nav": {
+        "display": "none",
+        "height": 0,
+        "width": 0
+      },
+      "overflow": false,
+      "reader": {
+        "display": "none",
+        "height": 0,
+        "width": 0
+      },
+      "root": {
+        "display": "flex",
+        "height": 730,
+        "width": 348
+      },
+      "topbar": {
+        "display": "flex",
+        "height": 97.296875,
+        "width": 348
+      },
+      "viewport": 390
+    },
+    {
+      "list": {
+        "display": "flex",
+        "height": 632.703125,
+        "width": 320
+      },
+      "nav": {
+        "display": "none",
+        "height": 0,
+        "width": 0
+      },
+      "overflow": false,
+      "reader": {
+        "display": "none",
+        "height": 0,
+        "width": 0
+      },
+      "root": {
+        "display": "flex",
+        "height": 730,
+        "width": 320
+      },
+      "topbar": {
+        "display": "flex",
+        "height": 97.296875,
+        "width": 320
+      },
+      "viewport": 362
+    }
+  ],
+  "modals": [
+    {
+      "error": [
+        0,
+        0
+      ],
+      "height": 304.59375,
+      "overflow": false,
+      "title": "添加订阅",
+      "viewport": [
+        1280,
+        800
+      ],
+      "width": 660,
+      "x": 310,
+      "y": 247.703125
+    },
+    {
+      "error": [
+        0,
+        0.00390625
+      ],
+      "height": 274.4453125,
+      "overflow": false,
+      "title": "创建分组",
+      "viewport": [
+        1280,
+        800
+      ],
+      "width": 660,
+      "x": 310,
+      "y": 262.7734375
+    },
+    {
+      "error": [
+        0,
+        0
+      ],
+      "height": 752,
+      "overflow": false,
+      "title": "订阅设置 · vault-a",
+      "viewport": [
+        1280,
+        800
+      ],
+      "width": 660,
+      "x": 310,
+      "y": 24
+    },
+    {
+      "error": [
+        0,
+        0.00390625
+      ],
+      "height": 740.4140625,
+      "overflow": false,
+      "title": "订阅源设置",
+      "viewport": [
+        1280,
+        800
+      ],
+      "width": 660,
+      "x": 310,
+      "y": 29.7890625
+    },
+    {
+      "error": [
+        0,
+        0
+      ],
+      "height": 568.265625,
+      "overflow": false,
+      "title": "保存到 Vault",
+      "viewport": [
+        1280,
+        800
+      ],
+      "width": 660,
+      "x": 310,
+      "y": 115.8671875
+    }
+  ],
+  "responsiveModals": [
+    {
+      "centerError": [
+        0,
+        0
+      ],
+      "footerVisible": true,
+      "headerVisible": true,
+      "height": 752,
+      "overflow": false,
+      "scrollable": true,
+      "viewport": [
+        390,
+        800
+      ],
+      "width": 358,
+      "x": 16,
+      "y": 24
+    },
+    {
+      "centerError": [
+        0,
+        0
+      ],
+      "footerVisible": true,
+      "headerVisible": true,
+      "height": 432,
+      "overflow": false,
+      "scrollable": true,
+      "viewport": [
+        720,
+        480
+      ],
+      "width": 660,
+      "x": 30,
+      "y": 24
+    },
+    {
+      "centerError": [
+        0,
+        0
+      ],
+      "footerVisible": true,
+      "headerVisible": true,
+      "height": 752,
+      "overflow": false,
+      "scrollable": true,
+      "viewport": [
+        1280,
+        800
+      ],
+      "width": 660,
+      "x": 310,
+      "y": 24
+    }
+  ]
+}

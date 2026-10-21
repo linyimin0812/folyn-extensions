@@ -1,0 +1,107 @@
+import { afterEach, describe, expect, it } from 'vitest';
+import { assignGroups, isInGroup, normalizeGroups, removeGroup, renameGroup } from '../src/groups';
+import { freshState, type Article, type Source } from '../src/model';
+import { Repository, ROOT } from '../src/repository';
+import { Subscriptions } from '../src/service';
+import { harness, memoryVault } from './helpers';
+
+const source = (id: string, groups: string[]): Source => ({ id, name: id, groups, rule: { kind: 'feed', url: `https://example.com/${id}.xml` }, interval: 0, autoDownload: false, paused: false, imported: 1 });
+const article = (sourceIds: string[]): Article => ({ id: 'article', title: 'A shared article', url: 'https://example.com/article', summary: '', discovered: '2026-10-17', sourceIds, read: true, starred: true, saved: [{ path: 'Notes/kept.md', mode: 'original', savedAt: '2026-10-17' }], positions: {} });
+const cleanups: (() => void)[] = [];
+afterEach(() => cleanups.splice(0).forEach(cleanup => cleanup()));
+
+describe('multiple source groups', () => {
+    it('assigns several groups without duplicate or blank memberships', () => {
+        const state = freshState();
+        const feed = source('feed', []);
+        state.sources.push(feed);
+        state.groups = ['已有'];
+        assignGroups(state, feed, [' 工程 ', '前端', '工程', '', '  ']);
+        expect(feed.groups).toEqual(['工程', '前端']);
+        expect(state.groups).toEqual(['已有', '工程', '前端']);
+        expect(normalizeGroups(['含,逗号', '含,逗号'])).toEqual(['含,逗号']);
+        assignGroups(state, feed, []);
+        expect(feed.groups).toEqual([]);
+        expect(state.groups).toEqual(['已有', '工程', '前端']);
+    });
+    it('matches overlapping groups and shared-source articles once per view', () => {
+        const sources = [source('a', ['工程', '前端']), source('b', ['工程'])];
+        const articles = [article(['a', 'b'])];
+        expect(articles.filter(a => isInGroup(a, sources, '工程'))).toHaveLength(1);
+        expect(articles.filter(a => isInGroup(a, sources, '前端'))).toHaveLength(1);
+        expect(articles.filter(a => isInGroup(a, sources, '其他'))).toHaveLength(0);
+    });
+    it('renames memberships, folded groups and the current filter together', () => {
+        const state = freshState();
+        state.groups = ['工程', '前端'];
+        state.sources = [source('feed', ['工程', '前端'])];
+        state.collapsed = ['工程'];
+        state.ui.view = 'group:工程';
+        renameGroup(state, '工程', ' 系统 ');
+        expect(state.groups).toEqual(['系统', '前端']);
+        expect(state.sources[0].groups).toEqual(['系统', '前端']);
+        expect(state.collapsed).toEqual(['系统']);
+        expect(state.ui.view).toBe('group:系统');
+        const snapshot = JSON.stringify(state);
+        expect(() => renameGroup(state, '系统', '前端')).toThrow('不重复');
+        expect(JSON.stringify(state)).toBe(snapshot);
+    });
+    it('removes only the selected group and preserves articles and other memberships', () => {
+        const state = freshState();
+        state.groups = ['工程', '前端'];
+        state.sources = [source('a', ['工程', '前端']), source('b', ['工程'])];
+        state.articles = [article(['a', 'b'])];
+        const kept = JSON.stringify(state.articles);
+        state.collapsed = ['工程', '前端'];
+        state.ui.view = 'group:工程';
+        removeGroup(state, '工程');
+        expect(state.sources.map(source => source.groups)).toEqual([['前端'], []]);
+        expect(state.groups).toEqual(['前端']);
+        expect(state.collapsed).toEqual(['前端']);
+        expect(state.ui.view).toBe('all');
+        expect(JSON.stringify(state.articles)).toBe(kept);
+    });
+    it('loads legacy single groups without touching files and saves only the new format', async () => {
+        const { vault, files } = memoryVault();
+        const state = freshState();
+        state.groups = ['工程'];
+        state.articles = [article(['a'])];
+        const legacy = { ...state, schema: 1, sources: [{ ...source('a', []), groups: undefined, group: '工程' }, { ...source('b', []), groups: undefined, group: '' }] };
+        const text = JSON.stringify(legacy);
+        files.set(`${ROOT}/state.json`, text);
+        files.set('Notes/kept.md', 'user edits');
+        files.set(`${ROOT}/bodies/article/version.json`, 'cached body');
+        const repo = new Repository(vault);
+        await repo.load();
+        expect(repo.state.schema).toBe(2);
+        expect(repo.state.sources.map(source => source.groups)).toEqual([['工程'], []]);
+        expect(files.get(`${ROOT}/state.json`)).toBe(text);
+        expect(repo.state.articles).toEqual(state.articles);
+        await repo.persist();
+        const reloaded = new Repository(vault);
+        await reloaded.load();
+        expect(reloaded.state).toEqual(repo.state);
+        expect(reloaded.state.sources[0]).not.toHaveProperty('group');
+        expect(files.get('Notes/kept.md')).toBe('user edits');
+        expect(files.get(`${ROOT}/bodies/article/version.json`)).toBe('cached body');
+    });
+    it('imports one source once, persists multiple groups and isolates Vaults', async () => {
+        const h = harness();
+        const service = new Subscriptions(h.host);
+        cleanups.push(() => { service.stop(); h.dispose(); });
+        await service.start();
+        const candidate = (await service.discover('https://example.com/'))[0];
+        const body = await service.preview(candidate);
+        await service.add(candidate, 'Shared feed', ['工程', '前端', '工程'], 20, 0, false, body);
+        expect(service.repo!.state.sources).toHaveLength(1);
+        expect(service.repo!.state.articles).toHaveLength(2);
+        expect(service.repo!.state.sources[0].groups).toEqual(['工程', '前端']);
+        await expect(service.add(candidate, '', ['其他'], 20, 0, false, body)).rejects.toThrow('已订阅');
+        expect(service.repo!.state.sources).toHaveLength(1);
+        await service.switchVault(h.second.vault);
+        expect(service.repo!.state.groups).toEqual([]);
+        await service.switchVault(h.first.vault);
+        expect(service.repo!.state.sources[0].groups).toEqual(['工程', '前端']);
+        expect(service.repo!.state.articles).toHaveLength(2);
+    });
+});

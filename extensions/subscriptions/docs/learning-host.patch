@@ -1,0 +1,703 @@
+diff --git a/packages/extension-sdk/src/extension.ts b/packages/extension-sdk/src/extension.ts
+--- a/packages/extension-sdk/src/extension.ts
++++ b/packages/extension-sdk/src/extension.ts
+@@ -257,6 +257,13 @@
+   list(fileType?: string): unknown[];
+ }
+ 
++/** A Markdown snapshot. Unsaved editor text takes priority over disk content. */
++export interface ExtensionNoteSnapshot {
++  path: string;
++  title: string;
++  text: string;
++}
++
+ /** A snapshot pinned to one local vault root; paths are always relative. */
+ export interface ExtensionVaultSession {
+   id: string;
+@@ -275,6 +282,15 @@
+   /** Rejects if this session is no longer the active vault. */
+   open(path: string): Promise<void>;
+   chooseDirectory(): Promise<string | null>;
++  /** Choose Markdown files inside the current vault. Cancellation returns []. */
++  chooseNotes(): Promise<ExtensionNoteSnapshot[]>;
++  /** Read a current-vault Markdown snapshot, preferring unsaved editor text. */
++  readNote(path: string): Promise<ExtensionNoteSnapshot>;
++  /** Append as one undoable native-editor edit only if the current note exactly
++   * matches expectedText. Opens the editor and follows its auto-save setting;
++   * success does not promise a disk save when auto-save is disabled.
++   * Rejects stale vaults, changed text and unavailable/read-only editors. */
++  appendNote(path: string, text: string, expectedText: string): Promise<void>;
+ }
+ export interface ExtensionVaultFileChange {
+   vaultId: string;
+diff --git a/packages/extension-sdk/index.ts b/packages/extension-sdk/index.ts
+--- a/packages/extension-sdk/index.ts
++++ b/packages/extension-sdk/index.ts
+@@ -74,6 +74,7 @@
+   ExtensionApi,
+   ExtensionSubscriptions,
+   ExtensionVaultSession,
++  ExtensionNoteSnapshot,
+   ExtensionVaultFileChange,
+   ExtensionLogger,
+   DialogApi,
+diff --git a/apps/desktop/src/services/editorHandleRegistry.ts b/apps/desktop/src/services/editorHandleRegistry.ts
+--- a/apps/desktop/src/services/editorHandleRegistry.ts
++++ b/apps/desktop/src/services/editorHandleRegistry.ts
+@@ -9,11 +9,25 @@
+ import type { FolynEditorHandle } from '@/editor/EditorView';
+ 
+ let active: FolynEditorHandle | null = null;
++let activeTabId: string | null = null;
++const listeners = new Set<() => void>();
+ 
+-export function setActiveEditorHandle(handle: FolynEditorHandle | null): void {
++export function setActiveEditorHandle(handle: FolynEditorHandle | null, tabId: string | null = null): void {
+   active = handle;
++  activeTabId = handle ? tabId : null;
++  for (const listener of listeners) listener();
+ }
+ 
+ export function getActiveEditorHandle(): FolynEditorHandle | null {
+   return active;
+ }
++
++/** File-aware access prevents a delayed append from editing the previous tab. */
++export function getActiveEditorHandleFor(tabId: string): FolynEditorHandle | null {
++  return activeTabId === tabId ? active : null;
++}
++
++export function onActiveEditorHandleChange(listener: () => void): () => void {
++  listeners.add(listener);
++  return () => { listeners.delete(listener); };
++}
+diff --git a/apps/desktop/src/components/work-area/WorkArea.tsx b/apps/desktop/src/components/work-area/WorkArea.tsx
+--- a/apps/desktop/src/components/work-area/WorkArea.tsx
++++ b/apps/desktop/src/components/work-area/WorkArea.tsx
+@@ -82,9 +82,9 @@
+   // Register the active editor handle so the ExtensionApi's `editor`
+   // capability can query/replace the selection without a direct view ref.
+   useEffect(() => {
+-    setActiveEditorHandle(editorRef.current);
++    setActiveEditorHandle(editorRef.current, activeTab?.id ?? null);
+     return () => setActiveEditorHandle(null);
+-  }, [activeTabId]);
++  }, [activeTabId, activePanel, viewMode, presentationMode, versionHistoryVisible]);
+ 
+   // Get the handler for the active tab
+   const handler = activeTab ? getHandlerById(activeTab.fileType) : undefined;
+diff --git a/apps/desktop/src/services/editorIoService.ts b/apps/desktop/src/services/editorIoService.ts
+--- a/apps/desktop/src/services/editorIoService.ts
++++ b/apps/desktop/src/services/editorIoService.ts
+@@ -91,7 +91,7 @@
+     const needsActivityUpdate = existing.activity !== correctActivity;
+ 
+     // If existing tab has empty content but the file type needs content, reload it
+-    if (!existing.content && getHandlerById(correctFileType)?.needsFileContent) {
++    if (!existing.content && !existing.isDirty && getHandlerById(correctFileType)?.needsFileContent) {
+       try {
+         const handler = getHandlerById(correctFileType);
+         const raw = await (options ? options.readText() : readRawContent(filePath));
+diff --git a/apps/desktop/src/services/editorIoService.test.ts b/apps/desktop/src/services/editorIoService.test.ts
+--- a/apps/desktop/src/services/editorIoService.test.ts
++++ b/apps/desktop/src/services/editorIoService.test.ts
+@@ -154,3 +154,18 @@
+     expect(n).toBe(0);
+   });
+ });
++
++describe('editorIoService dirty empty note', () => {
++  it('does not reload disk content after the user intentionally clears an open note', async () => {
++    editorState.tabs = [{ id: 'v1:empty.md', name: 'empty.md', path: 'empty.md', content: '', isDirty: true, fileType: 'markdown', activity: 'files' }];
++    editorState.activeTabId = 'v1:empty.md';
++    const readText = vi.fn(async () => 'old disk text');
++    // Earlier tests may spy the vault getter; restore the actual module mock.
++    const { useVaultStore } = await import('@/store/vaultStore');
++    vi.spyOn(useVaultStore, 'getState').mockReturnValue({ activeVaultId: 'v1', isLoading: false } as never);
++    await openFile('empty.md', 'empty.md', { expectedVaultId: 'v1', readText });
++    expect(readText).not.toHaveBeenCalled();
++    expect(editorState.tabs[0].content).toBe('');
++    expect(editorState.tabs[0].isDirty).toBe(true);
++  });
++});
+diff --git a/apps/desktop/src/services/extension-host/subscriptionsCapability.ts b/apps/desktop/src/services/extension-host/subscriptionsCapability.ts
+--- a/apps/desktop/src/services/extension-host/subscriptionsCapability.ts
++++ b/apps/desktop/src/services/extension-host/subscriptionsCapability.ts
+@@ -7,6 +7,7 @@
+ import { useFeaturePanelStore } from '@/store/featurePanelStore';
+ import { resolveBasePath } from '@/utils/pathResolver';
+ import { openFile } from '@/services/editorIoService';
++import { readEditedNoteText, appendNoteInEditor } from '@/services/editorNoteService';
+ import { onVaultFileChange } from './subscriptionsFileEvents';
+ 
+ const teardowns = new WeakMap<ExtensionSubscriptions, () => void>();
+@@ -15,6 +16,11 @@
+     throw new Error('Subscription paths must be relative to the selected vault');
+   }
+   return path;
++}
++function notePath(path: string): string {
++  const relative = relativePath(path);
++  if (!relative.toLowerCase().endsWith('.md')) throw new Error('Choose a Markdown note inside the selected vault');
++  return relative;
+ }
+ export function buildSubscriptions(manifest: ExtensionManifest): ExtensionSubscriptions | undefined {
+   if (manifest.tier !== 'trusted' || manifest.permissions?.subscriptions?.vault !== true || manifest.permissions.subscriptions.network !== true) return undefined;
+@@ -39,7 +45,7 @@
+       const capturedRoot = resolveBasePath(vault.basePath).then(v => v.replace(/[\\/]+$/, ''));
+       rootPromise = capturedRoot;
+       const assertCurrent = () => {
+-        if (closed || useVaultStore.getState().currentVault?.id !== capturedId || identity !== next) throw new Error('The selected vault has changed');
++        if (closed || session !== snapshot || useVaultStore.getState().isLoading || useVaultStore.getState().activeVaultId !== capturedId || useVaultStore.getState().currentVault?.id !== capturedId || identity !== next) throw new Error('The selected vault has changed');
+       };
+       const io = async <T>(operation: string, path: string, content?: string): Promise<T> => {
+         if (closed) throw new Error('Subscriptions extension is inactive');
+@@ -69,6 +75,45 @@
+           await openFile(relativePath(path), path.split('/').pop() || path, { expectedVaultId: capturedId, readText: async () => content });
+           assertCurrent();
+           useNavStore.getState().setCurrentPage('editor');
++        },
++        async readNote(path) {
++          assertCurrent();
++          const relative = notePath(path);
++          // Native IO validates grant, scoped path and symlinks even for dirty tabs.
++          const diskText = await snapshot.readText(relative);
++          assertCurrent();
++          const filename = relative.split('/').pop() || relative;
++          return {
++            path: relative,
++            title: filename.replace(/\.md$/i, '') || filename,
++            text: readEditedNoteText(capturedId, relative) ?? diskText,
++          };
++        },
++        async chooseNotes() {
++          assertCurrent();
++          const { open } = await import('@tauri-apps/plugin-dialog');
++          const root = (await capturedRoot).replace(/\\/g, '/');
++          assertCurrent();
++          const picked = await open({ directory: false, multiple: true, defaultPath: root, filters: [{ name: 'Markdown', extensions: ['md'] }] });
++          assertCurrent();
++          if (!picked) return [];
++          const paths = (Array.isArray(picked) ? picked : [picked]).map(path => {
++            const normalized = path.replace(/\\/g, '/');
++            if (!normalized.startsWith(`${root}/`)) throw new Error('Choose a Markdown note inside the selected vault');
++            return notePath(normalized.slice(root.length + 1));
++          });
++          const notes = [];
++          for (const path of new Set(paths)) notes.push(await snapshot.readNote(path));
++          assertCurrent();
++          return notes;
++        },
++        async appendNote(path, text, expectedText) {
++          assertCurrent();
++          const relative = notePath(path);
++          await appendNoteInEditor({
++            vaultId: capturedId, path: relative, text, expectedText, assertCurrent,
++            readText: async () => (await snapshot.readNote(relative)).text,
++          });
+         },
+         async chooseDirectory() {
+           assertCurrent();
+diff --git a/apps/desktop/src/services/extension-host/subscriptionsCapability.test.ts b/apps/desktop/src/services/extension-host/subscriptionsCapability.test.ts
+--- a/apps/desktop/src/services/extension-host/subscriptionsCapability.test.ts
++++ b/apps/desktop/src/services/extension-host/subscriptionsCapability.test.ts
+@@ -1,6 +1,6 @@
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+ const mocks = vi.hoisted(() => ({
+-  invoke: vi.fn(), open: vi.fn(), choose: vi.fn(),
++  invoke: vi.fn(), open: vi.fn(), choose: vi.fn(), editedNote: vi.fn(), appendNote: vi.fn(),
+   state: { currentVault: { id: 'a', name: 'A', basePath: '/vault-a', providerType: 'tauri' }, activeVaultId: 'a', isLoading: false, refreshFileTree: vi.fn() },
+   listeners: new Set<() => void>(),
+ }));
+@@ -10,6 +10,7 @@
+ vi.mock('@/store/vaultStore', () => ({ useVaultStore: { getState: () => mocks.state, subscribe: (cb: () => void) => { mocks.listeners.add(cb); return () => mocks.listeners.delete(cb); } } }));
+ vi.mock('@/utils/pathResolver', () => ({ resolveBasePath: async (p: string) => p }));
+ vi.mock('@/services/editorIoService', () => ({ openFile: mocks.open }));
++vi.mock('@/services/editorNoteService', () => ({ readEditedNoteText: mocks.editedNote, appendNoteInEditor: mocks.appendNote }));
+ import { buildSubscriptions, disposeSubscriptions } from './subscriptionsCapability';
+ import type { ExtensionManifest } from 'folyn-extension-sdk';
+ const manifest: ExtensionManifest = { id: 'test-subscriptions', name: 'Test', version: '0.1.0', tier: 'trusted', main: 'index.js', permissions: { subscriptions: { vault: true, network: true } } };
+@@ -17,6 +18,7 @@
+ beforeEach(() => {
+   mocks.state.currentVault = { id: 'a', name: 'A', basePath: '/vault-a', providerType: 'tauri' }; mocks.state.activeVaultId = 'a'; mocks.state.isLoading = false;
+   mocks.invoke.mockReset(); mocks.invoke.mockResolvedValue('content'); mocks.open.mockReset(); mocks.choose.mockReset();
++  mocks.editedNote.mockReset(); mocks.editedNote.mockReturnValue(undefined); mocks.appendNote.mockReset();
+ });
+ describe('subscription vault snapshots', () => {
+   it('exposes the capability only to trusted extensions with both explicit grants', () => {
+@@ -95,3 +97,99 @@
+     await expect(api.fetch('https://example.com')).rejects.toThrow('inactive');
+   });
+ });
++
++describe('subscription learning-note boundaries', () => {
++  it('reads unsaved Markdown snapshots after native grant/path validation', async () => {
++    const api = buildSubscriptions(manifest)!;
++    mocks.editedNote.mockReturnValue('');
++    expect(await api.current()!.readNote('Notes/Topic.md')).toEqual({ path: 'Notes/Topic.md', title: 'Topic', text: '' });
++    expect(mocks.invoke).toHaveBeenCalledWith('subscription_vault_io', expect.objectContaining({ operation: 'readText', root: '/vault-a', path: 'Notes/Topic.md' }));
++    mocks.editedNote.mockReturnValue(undefined);
++    expect((await api.current()!.readNote('Notes/Topic.md')).text).toBe('content');
++    disposeSubscriptions(api);
++  });
++  it('returns cancellation without reading and limits multi-select to unique current-vault Markdown files', async () => {
++    const api = buildSubscriptions(manifest)!;
++    mocks.choose.mockResolvedValue(null);
++    expect(await api.current()!.chooseNotes()).toEqual([]);
++    expect(mocks.invoke).not.toHaveBeenCalled();
++    mocks.choose.mockResolvedValue(['/vault-a/Notes/First.md', '/vault-a/Second.md', '/vault-a/Second.md']);
++    expect((await api.current()!.chooseNotes()).map(note => note.path)).toEqual(['Notes/First.md', 'Second.md']);
++    expect(mocks.choose).toHaveBeenCalledWith(expect.objectContaining({ directory: false, multiple: true, defaultPath: '/vault-a', filters: [{ name: 'Markdown', extensions: ['md'] }] }));
++    disposeSubscriptions(api);
++  });
++  it('rejects other vaults, traversal, non-Markdown files and native symlink errors', async () => {
++    const api = buildSubscriptions(manifest)!;
++    for (const picked of ['/vault-ab/other.md', '/vault-a/../escape.md', '/vault-a/image.png']) {
++      mocks.choose.mockResolvedValue([picked]);
++      await expect(api.current()!.chooseNotes()).rejects.toThrow();
++    }
++    expect(mocks.invoke).not.toHaveBeenCalled();
++    mocks.invoke.mockRejectedValue(new Error('symlinks are not allowed'));
++    await expect(api.current()!.readNote('linked.md')).rejects.toThrow('symlinks');
++    disposeSubscriptions(api);
++  });
++  it('discards picker results after a vault switch', async () => {
++    const api = buildSubscriptions(manifest)!;
++    let finish: (value: string[]) => void = () => {};
++    mocks.choose.mockImplementation(() => new Promise<string[]>(resolve => { finish = resolve; }));
++    const pending = api.current()!.chooseNotes();
++    const rejection = expect(pending).rejects.toThrow('vault has changed');
++    for (let i = 0; i < 6; i++) await Promise.resolve();
++    changeVault(); finish(['/vault-a/Topic.md']);
++    await rejection;
++    expect(mocks.invoke).not.toHaveBeenCalled();
++    disposeSubscriptions(api);
++  });
++  it('rejects snapshot reads that finish after a vault switch', async () => {
++    const api = buildSubscriptions(manifest)!;
++    let finish: (value: string) => void = () => {};
++    mocks.invoke.mockImplementation(() => new Promise<string>(resolve => { finish = resolve; }));
++    const pending = api.current()!.readNote('Topic.md');
++    const rejection = expect(pending).rejects.toThrow('vault has changed');
++    for (let i = 0; i < 6; i++) await Promise.resolve();
++    changeVault(); finish('old vault text');
++    await rejection;
++    disposeSubscriptions(api);
++  });
++  it('delegates appends to the editor with the expected snapshot and a fresh pinned read', async () => {
++    const api = buildSubscriptions(manifest)!;
++    mocks.appendNote.mockImplementation(async (options: { path: string; expectedText: string; readText(): Promise<string>; assertCurrent(): void }) => {
++      expect(options.path).toBe('Topic.md'); expect(options.expectedText).toBe('preview');
++      expect(await options.readText()).toBe('content'); options.assertCurrent();
++    });
++    await api.current()!.appendNote('Topic.md', 'addition', 'preview');
++    expect(mocks.appendNote).toHaveBeenCalledWith(expect.objectContaining({ vaultId: 'a', path: 'Topic.md', text: 'addition', expectedText: 'preview' }));
++    const old = api.current()!;
++    changeVault();
++    await expect(old.appendNote('Topic.md', 'late addition', 'preview')).rejects.toThrow('vault has changed');
++    expect(mocks.appendNote).toHaveBeenCalledTimes(1);
++    disposeSubscriptions(api);
++  });
++});
++
++describe('learning context lifetime', () => {
++  it('does not reactivate an old snapshot after A to B to A', async () => {
++    const api = buildSubscriptions(manifest)!;
++    const old = api.current()!;
++    changeVault();
++    mocks.state.currentVault = { id: 'a', name: 'A', basePath: '/vault-a', providerType: 'tauri' };
++    mocks.state.activeVaultId = 'a';
++    for (const listener of mocks.listeners) listener();
++    expect(api.current()).not.toBe(old);
++    await expect(old.readNote('Topic.md')).rejects.toThrow('vault has changed');
++    await expect(old.appendNote('Topic.md', 'late text', 'old text')).rejects.toThrow('vault has changed');
++    expect(mocks.invoke).not.toHaveBeenCalled(); expect(mocks.appendNote).not.toHaveBeenCalled();
++    disposeSubscriptions(api);
++  });
++  it('discards reads that finish after extension disposal', async () => {
++    const api = buildSubscriptions(manifest)!;
++    let finish: (value: string) => void = () => {};
++    mocks.invoke.mockImplementation(() => new Promise<string>(resolve => { finish = resolve; }));
++    const pending = api.current()!.readNote('Topic.md');
++    const rejection = expect(pending).rejects.toThrow('vault has changed');
++    for (let i = 0; i < 6; i++) await Promise.resolve();
++    disposeSubscriptions(api); finish('late text');
++    await rejection;
++  });
++});
+diff --git a/packages/extension-sdk/docs/extension-sdk-reference.md b/packages/extension-sdk/docs/extension-sdk-reference.md
+--- a/packages/extension-sdk/docs/extension-sdk-reference.md
++++ b/packages/extension-sdk/docs/extension-sdk-reference.md
+@@ -606,6 +606,13 @@
+ 
+ `ExtensionAiChatParams.persistHistory?: boolean` controls host chat-session history. Pass `false` for independent article translations or summaries to forward `historyMode: 'none'` (neither load nor save global host chat files). Omitted/true retains the existing history behavior. Provider/model selection and `useSharedSession` UI behavior are unchanged; leave shared sessions disabled for background fragment jobs. Supported by trusted capability and sandbox RPC.
+ 
++
++### Learning-note handoff
++
++`ExtensionNoteSnapshot` is `{ path: string, title: string, text: string }`. Pinned sessions expose `chooseNotes(): Promise<ExtensionNoteSnapshot[]>`, `readNote(path): Promise<ExtensionNoteSnapshot>`, and `appendNote(path, text, expectedText): Promise<void>` under the existing subscriptions grant. The native picker accepts multiple `.md` files within the current vault; cancellation returns `[]`. Reads validate native grant/path/symlink rules and prefer unsaved native-editor buffers, including intentionally empty notes. These operations reject stale/disposed sessions rather than delivering old-vault learning context.
++
++`appendNote` opens the selected note in a native source editor and compares the current text with the reviewed `expectedText` before and after editor mounting. It inserts one isolated, undoable transaction at the end, retaining existing unsaved text. A changed note, switched vault/tab, unavailable source mode or read-only editor rejects without an append. Success means the content reached the native editor and follows the user's normal auto-save preference; it does **not** promise a disk save when auto-save is off. Tell the user to confirm saving in the editor. New-note creation can still use atomic `createText` followed by `open`.
++
+ ### Public rendered-page acquisition
+ 
+ Declare `permissions.subscriptions.render: true` to expose optional `api.subscriptions.render(url)`. It returns `{ status, headers, body, url }` with a serialized DOM, final URL, synthetic status 200 and `x-folyn-rendered` / `x-folyn-status-unavailable` headers. Main HTTP status is not exposed by Tauri's browser API. Incognito acquisition uses a separate temporary profile, no existing user cookies, no app IPC, no downloads or new windows. Executable scripts/event handlers are removed from the snapshot; inert JSON/LD+JSON scripts and XML document roots remain available for extraction. It never clicks, logs in or solves verification.
+diff --git a/packages/extension-sdk/docs/extension-development.md b/packages/extension-sdk/docs/extension-development.md
+--- a/packages/extension-sdk/docs/extension-development.md
++++ b/packages/extension-sdk/docs/extension-development.md
+@@ -1485,6 +1485,13 @@
+ 
+ `ExtensionAiChatParams.persistHistory?: boolean` controls host chat-session history. Pass `false` for independent article translations or summaries to forward `historyMode: 'none'` (neither load nor save global host chat files). Omitted/true retains the existing history behavior. Provider/model selection and `useSharedSession` UI behavior are unchanged; leave shared sessions disabled for background fragment jobs. Supported by trusted capability and sandbox RPC.
+ 
++
++### Learning-note handoff
++
++`ExtensionNoteSnapshot` is `{ path: string, title: string, text: string }`. Pinned sessions expose `chooseNotes(): Promise<ExtensionNoteSnapshot[]>`, `readNote(path): Promise<ExtensionNoteSnapshot>`, and `appendNote(path, text, expectedText): Promise<void>` under the existing subscriptions grant. The native picker accepts multiple `.md` files within the current vault; cancellation returns `[]`. Reads validate native grant/path/symlink rules and prefer unsaved native-editor buffers, including intentionally empty notes. These operations reject stale/disposed sessions rather than delivering old-vault learning context.
++
++`appendNote` opens the selected note in a native source editor and compares the current text with the reviewed `expectedText` before and after editor mounting. It inserts one isolated, undoable transaction at the end, retaining existing unsaved text. A changed note, switched vault/tab, unavailable source mode or read-only editor rejects without an append. Success means the content reached the native editor and follows the user's normal auto-save preference; it does **not** promise a disk save when auto-save is off. Tell the user to confirm saving in the editor. New-note creation can still use atomic `createText` followed by `open`.
++
+ ### Public rendered-page acquisition
+ 
+ Declare `permissions.subscriptions.render: true` to expose optional `api.subscriptions.render(url)`. It returns `{ status, headers, body, url }` with a serialized DOM, final URL, synthetic status 200 and `x-folyn-rendered` / `x-folyn-status-unavailable` headers. Main HTTP status is not exposed by Tauri's browser API. Incognito acquisition uses a separate temporary profile, no existing user cookies, no app IPC, no downloads or new windows. Executable scripts/event handlers are removed from the snapshot; inert JSON/LD+JSON scripts and XML document roots remain available for extraction. It never clicks, logs in or solves verification.
+diff --git a/packages/extension-sdk/docs/extension-development.zh.md b/packages/extension-sdk/docs/extension-development.zh.md
+--- a/packages/extension-sdk/docs/extension-development.zh.md
++++ b/packages/extension-sdk/docs/extension-development.zh.md
+@@ -1266,6 +1266,13 @@
+ 
+ `ExtensionAiChatParams.persistHistory?: boolean` controls host chat-session history. Pass `false` for independent article translations or summaries to forward `historyMode: 'none'` (neither load nor save global host chat files). Omitted/true retains the existing history behavior. Provider/model selection and `useSharedSession` UI behavior are unchanged; leave shared sessions disabled for background fragment jobs. Supported by trusted capability and sandbox RPC.
+ 
++
++### Learning-note handoff
++
++`ExtensionNoteSnapshot` is `{ path: string, title: string, text: string }`. Pinned sessions expose `chooseNotes(): Promise<ExtensionNoteSnapshot[]>`, `readNote(path): Promise<ExtensionNoteSnapshot>`, and `appendNote(path, text, expectedText): Promise<void>` under the existing subscriptions grant. The native picker accepts multiple `.md` files within the current vault; cancellation returns `[]`. Reads validate native grant/path/symlink rules and prefer unsaved native-editor buffers, including intentionally empty notes. These operations reject stale/disposed sessions rather than delivering old-vault learning context.
++
++`appendNote` opens the selected note in a native source editor and compares the current text with the reviewed `expectedText` before and after editor mounting. It inserts one isolated, undoable transaction at the end, retaining existing unsaved text. A changed note, switched vault/tab, unavailable source mode or read-only editor rejects without an append. Success means the content reached the native editor and follows the user's normal auto-save preference; it does **not** promise a disk save when auto-save is off. Tell the user to confirm saving in the editor. New-note creation can still use atomic `createText` followed by `open`.
++
+ ### Public rendered-page acquisition
+ 
+ Declare `permissions.subscriptions.render: true` to expose optional `api.subscriptions.render(url)`. It returns `{ status, headers, body, url }` with a serialized DOM, final URL, synthetic status 200 and `x-folyn-rendered` / `x-folyn-status-unavailable` headers. Main HTTP status is not exposed by Tauri's browser API. Incognito acquisition uses a separate temporary profile, no existing user cookies, no app IPC, no downloads or new windows. Executable scripts/event handlers are removed from the snapshot; inert JSON/LD+JSON scripts and XML document roots remain available for extraction. It never clicks, logs in or solves verification.
+diff --git a/.trellis/spec/extension-host/frontend/subscriptions-contract.md b/.trellis/spec/extension-host/frontend/subscriptions-contract.md
+--- a/.trellis/spec/extension-host/frontend/subscriptions-contract.md
++++ b/.trellis/spec/extension-host/frontend/subscriptions-contract.md
+@@ -58,3 +58,12 @@
+ Keep direct HTTP public-IP pinning and no_proxy. Some routes fail before HTTP while the OS-proxy/browser route succeeds; changing User-Agent/Referer or disabling certificate checks does not address that route difference. The internal binary fetch fallback requires both network+render grants and a JS-generated requestId tracked by activation disposal. Only image documents are acquired: validate public main navigation, same-origin credentialless fetch with redirect:error, stream-limit20MiB, preserve actual Content-Type and bytes (no Canvas). Native result validation checks successful image MIME, base64 size, nonempty bytes and byte-count agreement.
+ 
+ Both page/image acquisitions share FIFO single-renderer capacity, a bounded8-job registry and28-second total queue/acquisition deadline. Pin the semaphore acquire future across cancellation polling so waiting jobs keep their position. Cancel only active jobs owned by the requesting extension, and batch JS teardown IDs into at most32 per native invocation. Tests must verify a real production binary fallback path, two concurrent image requests, queued cancellation without an extra window, foreign-owner cancellation rejection, cleanup, MIME/raw byte preservation and private destination denial. A standalone smoke with registry auth stub is not installed-plugin end-to-end QA.
++
++
++## Learning-note editor handoff
++
++The pinned session owns `chooseNotes`, `readNote`, and `appendNote(path,text,expectedText)`. Snapshot fields are `{path,title,text}`. Native picker selections must be `.md` files inside the captured root; read through native subscription IO even when a dirty editor buffer exists so grant and symlink checks remain effective. Unsaved editor buffers (including empty strings) override disk. Learning reads/pickers reject late results after vault transition or extension disposal.
++
++Editor policy belongs in `editorNoteService`, not the capability provider: match the handle by captured vault + tab ID, open a source mode, and wait for readiness instead of appending through the previous tab's global handle. Compare `expectedText` at request time and against the mounted CodeMirror document. The append is one `isolateHistory('full')` transaction so Undo removes only the addition, preserving prior typing. Never replace the whole tab content or force-save through an error-swallowing service. Success means editor insertion under the user's existing auto-save setting; auto-save-off remains dirty.
++
++The handle registry must track tab identity and notify readiness when view mode changes. Opening an existing dirty empty tab must not reload old disk contents. Focused regressions cover dirty empty snapshots, current-vault picker containment, stale picker/read results, mounting the correct target, stale snapshot/readonly/unsupported editor rejection, concurrent appends (one winner), timeout cleanup, and actual CodeMirror Undo. Full React/native window mounting is a separate acceptance step; isolated service tests do not prove it.
+diff --git a/apps/desktop/src/services/editorNoteService.ts b/apps/desktop/src/services/editorNoteService.ts
+new file mode 100644
+--- /dev/null
++++ b/apps/desktop/src/services/editorNoteService.ts
+@@ -0,0 +1,100 @@
++/** Editor-owned note handoff for explicit learning-note appends. */
++import { isolateHistory } from '@codemirror/commands';
++import type { EditorView } from '@codemirror/view';
++import { useEditorStore } from '@/store/editorStore';
++import { useEditorViewStateStore } from '@/store/editorViewState';
++import { useVaultStore } from '@/store/vaultStore';
++import { useNavStore } from '@/store/navStore';
++import { getHandlerById } from '@/components/file-types/registry';
++import { openFile } from './editorIoService';
++import { getActiveEditorHandleFor, onActiveEditorHandleChange } from './editorHandleRegistry';
++
++/** A clean tab may be stale relative to disk. Only unsaved text takes priority. */
++export function readEditedNoteText(vaultId: string, path: string): string | undefined {
++  const tabId = `${vaultId}:${path}`;
++  const tab = useEditorStore.getState().tabs.find(candidate => candidate.id === tabId);
++  if (!tab?.isDirty) return undefined;
++  return getActiveEditorHandleFor(tabId)?.getView()?.state.doc.toString() ?? tab.content;
++}
++
++interface AppendNoteOptions {
++  vaultId: string;
++  path: string;
++  text: string;
++  expectedText: string;
++  readText(): Promise<string>;
++  assertCurrent(): void;
++}
++
++function waitForNoteEditor(tabId: string, assertCurrent: () => void): Promise<EditorView> {
++  return new Promise((resolve, reject) => {
++    let stopHandle = () => {};
++    let stopVault = () => {};
++    let stopEditor = () => {};
++    const cleanup = () => {
++      clearTimeout(timer);
++      stopHandle(); stopVault(); stopEditor();
++    };
++    const fail = (error: unknown) => { cleanup(); reject(error); };
++    const check = () => {
++      try {
++        assertCurrent();
++        const editor = useEditorStore.getState();
++        if (editor.activeTabId !== tabId || !editor.tabs.some(tab => tab.id === tabId)) {
++          throw new Error('The selected note has changed; choose it again');
++        }
++        const view = getActiveEditorHandleFor(tabId)?.getView();
++        if (view) { cleanup(); resolve(view); }
++      } catch (error) { fail(error); }
++    };
++    const timer = setTimeout(() => fail(new Error('The note editor is not available; open the note and retry')), 5000);
++    stopHandle = onActiveEditorHandleChange(check);
++    stopVault = useVaultStore.subscribe(check);
++    stopEditor = useEditorStore.subscribe(check);
++    check();
++  });
++}
++
++export async function appendNoteInEditor(options: AppendNoteOptions): Promise<void> {
++  const { vaultId, path, text, expectedText, assertCurrent } = options;
++  assertCurrent();
++  if (!text.trim()) throw new Error('There is no note content to append');
++  const currentText = await options.readText();
++  assertCurrent();
++  if (currentText !== expectedText) throw new Error('The note has changed; review the latest content before appending');
++  await openFile(path, path.split('/').pop() || path, { expectedVaultId: vaultId, readText: async () => currentText });
++  assertCurrent();
++  const editor = useEditorStore.getState();
++  const tabId = `${vaultId}:${path}`;
++  const tab = editor.tabs.find(candidate => candidate.id === tabId);
++  const sourceMode = tab && getHandlerById(tab.fileType)?.modes.find(mode => mode.kind === 'shell-editor');
++  if (!sourceMode) throw new Error('The selected note does not provide a native text editor');
++  // Set the panel directly: setActivePanel would select a different first tab.
++  useEditorStore.setState({ activePanel: 'files' });
++  useEditorStore.getState().setViewMode(sourceMode.id);
++  useEditorViewStateStore.getState().setPresentationMode(false);
++  useEditorViewStateStore.getState().setVersionHistoryVisible(false);
++  useNavStore.getState().setCurrentPage('editor');
++  const view = await waitForNoteEditor(tabId, assertCurrent);
++  // Tab swaps release their editor write-back guard in a microtask.
++  await Promise.resolve();
++  assertCurrent();
++  if (useEditorStore.getState().activeTabId !== tabId || getActiveEditorHandleFor(tabId)?.getView() !== view) {
++    throw new Error('The selected note has changed; choose it again');
++  }
++  if (view.state.readOnly) throw new Error('The selected note editor is read-only');
++  if (view.state.doc.toString() !== expectedText) {
++    throw new Error('The note has changed; review the latest content before appending');
++  }
++  const end = view.state.doc.length;
++  const separator = !expectedText || expectedText.endsWith('\n\n') ? '' : expectedText.endsWith('\n') ? '\n' : '\n\n';
++  const insert = separator + text;
++  view.dispatch({
++    changes: { from: end, insert },
++    selection: { anchor: end + insert.length },
++    annotations: isolateHistory.of('full'),
++    userEvent: 'input',
++    scrollIntoView: true,
++  });
++  view.focus();
++}
+diff --git a/apps/desktop/src/services/editorNoteService.test.ts b/apps/desktop/src/services/editorNoteService.test.ts
+new file mode 100644
+--- /dev/null
++++ b/apps/desktop/src/services/editorNoteService.test.ts
+@@ -0,0 +1,198 @@
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import { EditorState } from '@codemirror/state';
++import { EditorView } from '@codemirror/view';
++import { history, undo, undoDepth } from '@codemirror/commands';
++
++const mocks = vi.hoisted(() => ({
++  editor: {
++    tabs: [] as Array<{ id: string; path: string; name: string; content: string; isDirty: boolean; fileType: string; activity: string }>,
++    activeTabId: 'a:notes/topic.md', activePanel: 'files', setViewMode: vi.fn(),
++  },
++  editorListeners: new Set<() => void>(), vaultListeners: new Set<() => void>(),
++  open: vi.fn(), handler: vi.fn(), navigate: vi.fn(), presentation: vi.fn(), historyVisible: vi.fn(),
++  current: true,
++}));
++vi.mock('@/store/editorStore', () => ({ useEditorStore: {
++  getState: () => mocks.editor,
++  setState: (value: Partial<typeof mocks.editor>) => { Object.assign(mocks.editor, value); },
++  subscribe: (callback: () => void) => { mocks.editorListeners.add(callback); return () => mocks.editorListeners.delete(callback); },
++} }));
++vi.mock('@/store/vaultStore', () => ({ useVaultStore: { subscribe: (callback: () => void) => { mocks.vaultListeners.add(callback); return () => mocks.vaultListeners.delete(callback); } } }));
++vi.mock('@/store/editorViewState', () => ({ useEditorViewStateStore: { getState: () => ({ setPresentationMode: mocks.presentation, setVersionHistoryVisible: mocks.historyVisible }) } }));
++vi.mock('@/store/navStore', () => ({ useNavStore: { getState: () => ({ setCurrentPage: mocks.navigate }) } }));
++vi.mock('@/components/file-types/registry', () => ({ getHandlerById: mocks.handler }));
++vi.mock('./editorIoService', () => ({ openFile: mocks.open }));
++import { appendNoteInEditor, readEditedNoteText } from './editorNoteService';
++import { setActiveEditorHandle } from './editorHandleRegistry';
++
++const views: EditorView[] = [];
++const original = '# Topic\nMy unsaved thought';
++function registerView(text = original, tabId = 'a:notes/topic.md', readonly = false) {
++  const view = new EditorView({ state: EditorState.create({ doc: text, extensions: [
++    history(), EditorState.readOnly.of(readonly),
++    EditorView.updateListener.of(update => {
++      if (!update.docChanged) return;
++      const tab = mocks.editor.tabs.find(candidate => candidate.id === tabId);
++      if (tab) { tab.content = update.state.doc.toString(); tab.isDirty = true; }
++    }),
++  ] }), parent: document.body });
++  views.push(view);
++  setActiveEditorHandle({ getView: () => view, getScrollDOM: () => view.scrollDOM, replaceContent: () => {} }, tabId);
++  return view;
++}
++function options(expectedText = original) {
++  return { vaultId: 'a', path: 'notes/topic.md', text: '## Learning\nMy new note', expectedText,
++    readText: async () => mocks.editor.tabs[0].content,
++    assertCurrent() { if (!mocks.current) throw new Error('The selected vault has changed'); },
++  };
++}
++async function flush() { for (let i = 0; i < 8; i++) await Promise.resolve(); }
++beforeEach(() => {
++  vi.clearAllMocks();
++  mocks.current = true;
++  mocks.editor.tabs = [{ id: 'a:notes/topic.md', path: 'notes/topic.md', name: 'topic.md', content: original, isDirty: true, fileType: 'markdown', activity: 'files' }];
++  mocks.editor.activeTabId = 'a:notes/topic.md';
++  mocks.editorListeners.clear(); mocks.vaultListeners.clear();
++  mocks.open.mockResolvedValue(undefined);
++  mocks.handler.mockReturnValue({ modes: [{ id: 'source', kind: 'shell-editor' }] });
++});
++afterEach(() => {
++  setActiveEditorHandle(null);
++  for (const view of views.splice(0)) view.destroy();
++  document.body.innerHTML = '';
++  vi.useRealTimers();
++});
++
++describe('native learning-note append', () => {
++  it('prefers a dirty current editor and preserves an intentionally empty dirty buffer', () => {
++    registerView('latest live edit');
++    expect(readEditedNoteText('a', 'notes/topic.md')).toBe('latest live edit');
++    setActiveEditorHandle(null);
++    mocks.editor.tabs[0].content = '';
++    expect(readEditedNoteText('a', 'notes/topic.md')).toBe('');
++    expect(readEditedNoteText('b', 'notes/topic.md')).toBeUndefined();
++    mocks.editor.tabs[0].isDirty = false;
++    expect(readEditedNoteText('a', 'notes/topic.md')).toBeUndefined();
++  });
++
++  it('appends one undoable transaction, preserving earlier unsaved edits and opening source mode', async () => {
++    const view = registerView();
++    await appendNoteInEditor(options());
++    expect(view.state.doc.toString()).toBe(`${original}\n\n## Learning\nMy new note`);
++    expect(mocks.editor.tabs[0].content).toBe(view.state.doc.toString());
++    expect(mocks.editor.tabs[0].isDirty).toBe(true);
++    expect(mocks.open).toHaveBeenCalledWith('notes/topic.md', 'topic.md', expect.objectContaining({ expectedVaultId: 'a' }));
++    expect(mocks.editor.setViewMode).toHaveBeenCalledWith('source');
++    expect(mocks.navigate).toHaveBeenCalledWith('editor');
++    expect(mocks.presentation).toHaveBeenCalledWith(false);
++    expect(mocks.historyVisible).toHaveBeenCalledWith(false);
++    expect(undoDepth(view.state)).toBe(1);
++    expect(undo(view)).toBe(true);
++    expect(view.state.doc.toString()).toBe(original);
++    expect(mocks.editorListeners.size).toBe(0); expect(mocks.vaultListeners.size).toBe(0);
++  });
++
++  it('keeps the append separate from preceding typing in undo history', async () => {
++    const view = registerView();
++    view.dispatch({ changes: { from: view.state.doc.length, insert: ' typing' }, userEvent: 'input.type' });
++    const beforeAppend = view.state.doc.toString();
++    await appendNoteInEditor(options(beforeAppend));
++    expect(undoDepth(view.state)).toBe(2);
++    undo(view); expect(view.state.doc.toString()).toBe(beforeAppend);
++    undo(view); expect(view.state.doc.toString()).toBe(original);
++  });
++
++  it('does not add blank prefix lines when appending to an empty dirty note', async () => {
++    mocks.editor.tabs[0].content = '';
++    const view = registerView('');
++    await appendNoteInEditor(options(''));
++    expect(view.state.doc.toString()).toBe('## Learning\nMy new note');
++  });
++
++  it('rejects a stale preview before opening any editor', async () => {
++    await expect(appendNoteInEditor(options('older preview'))).rejects.toThrow('note has changed');
++    expect(mocks.open).not.toHaveBeenCalled();
++  });
++
++  it('waits for the matching target handle instead of dispatching to an identically worded previous tab', async () => {
++    const wrongView = registerView(original, 'a:other.md');
++    const pending = appendNoteInEditor(options());
++    await flush();
++    expect(wrongView.state.doc.toString()).toBe(original);
++    expect(mocks.editorListeners.size).toBe(1);
++    const rightView = registerView();
++    await pending;
++    expect(wrongView.state.doc.toString()).toBe(original);
++    expect(rightView.state.doc.toString()).toContain('## Learning');
++  });
++
++  it('compares again after mounting the editor and preserves newer edits', async () => {
++    const pending = appendNoteInEditor(options());
++    const rejection = expect(pending).rejects.toThrow('note has changed');
++    await flush();
++    const view = registerView('updated while mounting');
++    await rejection;
++    expect(view.state.doc.toString()).toBe('updated while mounting');
++  });
++
++  it('rejects a vault switch during IO before opening a target', async () => {
++    let finish: (text: string) => void = () => {};
++    const pending = appendNoteInEditor({ ...options(), readText: () => new Promise<string>(resolve => { finish = resolve; }) });
++    const rejection = expect(pending).rejects.toThrow('vault has changed');
++    mocks.current = false; finish(original);
++    await rejection;
++    expect(mocks.open).not.toHaveBeenCalled();
++  });
++
++  it('rejects a vault switch while waiting and cleans up readiness listeners', async () => {
++    const pending = appendNoteInEditor(options());
++    const rejection = expect(pending).rejects.toThrow('vault has changed');
++    await flush();
++    mocks.current = false; for (const listener of mocks.vaultListeners) listener();
++    await rejection;
++    expect(mocks.editorListeners.size).toBe(0); expect(mocks.vaultListeners.size).toBe(0);
++  });
++
++  it('rejects switching to another target while waiting', async () => {
++    const pending = appendNoteInEditor(options());
++    const rejection = expect(pending).rejects.toThrow('selected note has changed');
++    await flush();
++    mocks.editor.activeTabId = 'a:other.md'; for (const listener of mocks.editorListeners) listener();
++    await rejection;
++  });
++
++  it('rejects readonly editors without changing them', async () => {
++    const view = registerView(original, undefined, true);
++    await expect(appendNoteInEditor(options())).rejects.toThrow('read-only');
++    expect(view.state.doc.toString()).toBe(original);
++  });
++
++  it('rejects providers without a native source editor', async () => {
++    mocks.handler.mockReturnValue({ modes: [{ id: 'visual', kind: 'component' }] });
++    await expect(appendNoteInEditor(options())).rejects.toThrow('native text editor');
++    expect(mocks.navigate).not.toHaveBeenCalled();
++  });
++
++  it('rejects empty additions without reading or opening a note', async () => {
++    const readText = vi.fn();
++    await expect(appendNoteInEditor({ ...options(), text: '  ', readText })).rejects.toThrow('no note content');
++    expect(readText).not.toHaveBeenCalled(); expect(mocks.open).not.toHaveBeenCalled();
++  });
++
++  it('allows only one simultaneous append against the same expected snapshot', async () => {
++    const view = registerView();
++    const results = await Promise.allSettled([appendNoteInEditor(options()), appendNoteInEditor(options())]);
++    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
++    expect(results.filter(result => result.status === 'rejected')).toHaveLength(1);
++    expect(view.state.doc.toString().match(/## Learning/g)).toHaveLength(1);
++  });
++
++  it('reports unavailable editors and cleans up instead of waiting indefinitely', async () => {
++    vi.useFakeTimers();
++    const pending = appendNoteInEditor(options());
++    const rejection = expect(pending).rejects.toThrow('not available');
++    await vi.advanceTimersByTimeAsync(5001);
++    await rejection;
++    expect(mocks.editorListeners.size).toBe(0); expect(mocks.vaultListeners.size).toBe(0);
++  });
++});

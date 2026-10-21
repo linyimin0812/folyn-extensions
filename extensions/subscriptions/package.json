@@ -1,0 +1,48 @@
+{
+  "name": "folyn-extension-subscriptions",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "dev": "vite --host 127.0.0.1",
+    "prototype:learning": "vite --host 127.0.0.1 --port 4178 --strictPort",
+    "package": "pnpm build && node scripts/package.mjs"
+  },
+  "dependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "dompurify": "^3.3.0",
+    "highlight.js": "11.11.1",
+    "marked": "16.4.2",
+    "turndown": "^7.2.0",
+    "turndown-plugin-gfm": "^1.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/turndown": "^5.0.5",
+    "esbuild": "^0.25.0",
+    "folyn-extension-sdk": "file:../../../folyn/packages/extension-sdk",
+    "jsdom": "^26.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.7.0",
+    "vite": "^6.4.0",
+    "vitest": "^3.2.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "rollup": "4.62.4",
+      "tldts": "6.1.86",
+      "tldts-core": "6.1.86",
+      "scheduler": "https://registry.npmjs.org/scheduler/-/scheduler-0.23.2.tgz",
+      "turndown>@mixmark-io/domino": "-"
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

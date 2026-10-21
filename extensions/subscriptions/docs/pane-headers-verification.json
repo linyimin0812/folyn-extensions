@@ -1,0 +1,188 @@
+{
+  "version": "0.1.5",
+  "environment": "Packaged trusted module, host shell and CSS reset, memory Vault",
+  "desktop": [
+    {
+      "action": "收起来源栏",
+      "headerButtons": [
+        {
+          "insideHeader": true,
+          "name": "展开来源栏"
+        },
+        {
+          "insideHeader": true,
+          "name": "收起文章列表"
+        }
+      ],
+      "overflow": false,
+      "readerTitle": "把异步任务绑定到正确的 Vault",
+      "topbarControls": [
+        "刷新全部",
+        "添加订阅"
+      ],
+      "widths": [
+        36,
+        340
+      ]
+    },
+    {
+      "action": "收起文章列表",
+      "headerButtons": [
+        {
+          "insideHeader": true,
+          "name": "展开来源栏"
+        },
+        {
+          "insideHeader": true,
+          "name": "展开文章列表"
+        }
+      ],
+      "overflow": false,
+      "readerTitle": "把异步任务绑定到正确的 Vault",
+      "topbarControls": [
+        "刷新全部",
+        "添加订阅"
+      ],
+      "widths": [
+        36,
+        36
+      ]
+    },
+    {
+      "action": "展开来源栏",
+      "headerButtons": [
+        {
+          "insideHeader": true,
+          "name": "收起来源栏"
+        },
+        {
+          "insideHeader": true,
+          "name": "展开文章列表"
+        }
+      ],
+      "overflow": false,
+      "readerTitle": "把异步任务绑定到正确的 Vault",
+      "topbarControls": [
+        "刷新全部",
+        "添加订阅"
+      ],
+      "widths": [
+        196,
+        36
+      ]
+    },
+    {
+      "action": "展开文章列表",
+      "headerButtons": [
+        {
+          "insideHeader": true,
+          "name": "收起来源栏"
+        },
+        {
+          "insideHeader": true,
+          "name": "收起文章列表"
+        }
+      ],
+      "overflow": false,
+      "readerTitle": "把异步任务绑定到正确的 Vault",
+      "topbarControls": [
+        "刷新全部",
+        "添加订阅"
+      ],
+      "widths": [
+        196,
+        340
+      ]
+    }
+  ],
+  "responsive": [
+    {
+      "buttons": [
+        "展开来源栏",
+        "收起文章列表"
+      ],
+      "overflow": false,
+      "panes": [
+        {
+          "display": "flex",
+          "s": ".nav",
+          "width": 36
+        },
+        {
+          "display": "flex",
+          "s": ".list-pane",
+          "width": 340
+        },
+        {
+          "display": "flex",
+          "s": ".reader",
+          "width": 582
+        }
+      ],
+      "root": 958,
+      "viewport": 1000
+    },
+    {
+      "buttons": [
+        "展开来源栏",
+        "收起文章列表"
+      ],
+      "overflow": false,
+      "panes": [
+        {
+          "display": "flex",
+          "s": ".nav",
+          "width": 36
+        },
+        {
+          "display": "flex",
+          "s": ".list-pane",
+          "width": 642
+        },
+        {
+          "display": "none",
+          "s": ".reader",
+          "width": 0
+        }
+      ],
+      "root": 678,
+      "viewport": 720
+    },
+    {
+      "buttons": [
+        "展开来源栏",
+        "收起文章列表"
+      ],
+      "overflow": false,
+      "panes": [
+        {
+          "display": "flex",
+          "s": ".nav",
+          "width": 36
+        },
+        {
+          "display": "flex",
+          "s": ".list-pane",
+          "width": 242
+        },
+        {
+          "display": "none",
+          "s": ".reader",
+          "width": 0
+        }
+      ],
+      "root": 278,
+      "viewport": 320
+    }
+  ],
+  "restoredAfterVaultSwitch": {
+    "buttons": [
+      "展开来源栏",
+      "展开文章列表"
+    ],
+    "widths": [
+      36,
+      36
+    ]
+  }
+}
