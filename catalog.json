@@ -254,6 +254,30 @@
       "author": "Folyn",
       "icon": "@",
       "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/folyn-email-collector-0.1.1/folyn-email-collector-0.1.1.zip"
+    },
+    {
+      "id": "folyn-subscriptions",
+      "name": {
+        "zh": "订阅",
+        "en": "Subscriptions",
+        "ja": "購読",
+        "fr": "Abonnements",
+        "de": "Abonnements",
+        "es": "Suscripciones"
+      },
+      "version": "0.0.1",
+      "description": {
+        "zh": "博客与网站订阅：离线阅读、流式翻译、选段追问与笔记。需要包含订阅接口更新的 Folyn 宿主。",
+        "en": "Blog and website subscriptions with offline reading, streaming translation, selected-passage chat and notes. Requires Folyn with the subscriptions host API update.",
+        "ja": "ブログ・サイト購読、オフライン閲覧、ストリーミング翻訳、選択箇所の質問とノート。購読API更新済みのFolynが必要です。",
+        "fr": "Abonnez-vous aux blogs et sites : lecture hors ligne, traduction en continu, questions sur une sélection et notes. Nécessite Folyn avec la mise à jour API des abonnements.",
+        "de": "Blogs und Websites abonnieren: offline lesen, Streaming-Übersetzung, Fragen zu Textstellen und Notizen. Erfordert Folyn mit aktualisierter Abonnement-API.",
+        "es": "Suscripciones a blogs y sitios: lectura sin conexión, traducción en streaming, preguntas sobre selecciones y notas. Requiere Folyn con la API de suscripciones actualizada."
+      },
+      "tier": "trusted",
+      "author": "yiminlin",
+      "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\"><circle cx=\"5\" cy=\"19\" r=\"1\"/><path d=\"M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16\"/></svg>",
+      "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/folyn-subscriptions-0.0.1/folyn-subscriptions.zip"
     }
   ]
 }
