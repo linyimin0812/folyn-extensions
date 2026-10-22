@@ -75,9 +75,9 @@ void service.start().then(async () => {
         }
         await repo.persist();
         const inject = document.createElement('button'); inject.textContent = '模拟下次提交写入失败';
-        const write = demo.first.vault.writeText.bind(demo.first.vault);
+        const write = demo.first.vault.data.writeText.bind(demo.first.vault.data);
         let failNext = false;
-        demo.first.vault.writeText = async (path, value) => {
+        demo.first.vault.data.writeText = async (path, value) => {
             if (failNext && path.endsWith('/state.json')) { failNext = false; inject.textContent = '已触发模拟写入失败'; throw new Error('模拟 Vault 写入失败，请重试'); }
             return write(path, value);
         };
@@ -108,14 +108,14 @@ void service.start().then(async () => {
         const repo = service.repo!, article = repo.state.articles[0], body = await repo.body(article);
         if (body) {
             article.title = '图多文章的缓存状态与失败重试';
-            body.images = Array.from({ length: 32 }, (_, i) => ({ url: `https://example.com/many-photo-${i}.png`, ...(i >= 1 && i <= 3 ? { error: i === 3 ? '网页获取失败（HTTP 403）' : '旧版缓存限制或网络超时' } : { path: `.folyn/subscriptions/images/preview-${i}.png`, bytes: 20 }) }));
-            for (const image of body.images) if (image.path) demo.first.files.set(image.path, new Uint8Array(20));
+            body.images = Array.from({ length: 32 }, (_, i) => ({ url: `https://example.com/many-photo-${i}.png`, ...(i >= 1 && i <= 3 ? { error: i === 3 ? '网页获取失败（HTTP 403）' : '旧版缓存限制或网络超时' } : { path: `subscriptions/images/preview-${i}.png`, bytes: 20 }) }));
+            for (const image of body.images) if (image.path) demo.first.dataFiles.set(image.path, new Uint8Array(20));
             body.blocks = [{ id: 'images-intro', html: '<p>图片缓存会显示已缓存数与正文识别总数。没有缓存成功的图片保留原图入口，重试时复用已有缓存。</p>' }, ...body.images.map((image, i) => ({ id: `image-${i}`, html: `<p><img src="${image.url}" alt="示例图片 ${i + 1}"></p>` }))];
             body.html = body.blocks.map(block => block.html).join('\n');
             article.cache = { version: body.version, images: 32, missing: 3, unsupported: false, pending: false };
             await repo.putBody(body); await repo.persist();
-            const asset = demo.first.vault.assetUrl;
-            demo.first.vault.assetUrl = async value => value.startsWith(`.folyn/subscriptions/images/`) ? `${location.origin}/test/fixtures/${params.has('longimage') ? 'reader-long-image.svg' : 'stream-image.svg'}` : asset(value);
+            const asset = demo.first.vault.data.assetUrl;
+            demo.first.vault.data.assetUrl = async value => value.startsWith(`subscriptions/images/`) ? `${location.origin}/test/fixtures/${params.has('longimage') ? 'reader-long-image.svg' : 'stream-image.svg'}` : asset(value);
             const fetch = demo.host.support.fetch;
             demo.host.support.fetch = async (url, binary) => {
                 if (binary && url.includes('/many-photo-')) {
@@ -131,13 +131,13 @@ void service.start().then(async () => {
         const repo = service.repo!, article = repo.state.articles[0];
         if (article) {
             const body = (await repo.body(article))!;
-            const url = 'https://example.com/stream-image.png', path = '.folyn/subscriptions/images/stream-image.png';
+            const url = 'https://example.com/stream-image.png', path = 'subscriptions/images/stream-image.png';
             body.blocks.unshift({ id: 'stream-image', html: `<p><img src="${url}" alt="Cached article image"></p>` });
             body.images = [{ url, path }]; body.html = body.blocks.map(block => block.html).join('\n');
             await repo.putBody(body);
             if (article.cache) article.cache.images = 1;
-            const asset = demo.first.vault.assetUrl;
-            demo.first.vault.assetUrl = async value => value === path ? `${location.origin}/test/fixtures/${params.has('longimage') ? 'reader-long-image.svg' : 'stream-image.svg'}` : asset(value);
+            const asset = demo.first.vault.data.assetUrl;
+            demo.first.vault.data.assetUrl = async value => value === path ? `${location.origin}/test/fixtures/${params.has('longimage') ? 'reader-long-image.svg' : 'stream-image.svg'}` : asset(value);
             await repo.persist();
             const proof = document.createElement('span'); proof.id = 'image-proof';
             document.getElementById('testbar')?.append(proof);

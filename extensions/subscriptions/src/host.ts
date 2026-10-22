@@ -1,43 +1,9 @@
-import type { ExtensionApi, ExtensionContext, ExtensionHttpResponse, Disposable } from 'folyn-extension-sdk';
-export interface NoteSnapshot { path: string; title: string; text: string }
-export interface VaultSession {
-    id: string;
-    name: string;
-    readText(path: string): Promise<string>;
-    readBinary(path: string): Promise<Uint8Array>;
-    writeText(path: string, content: string): Promise<void>;
-    writeBinary(path: string, content: Uint8Array): Promise<void>;
-    createText(path: string, content: string): Promise<void>;
-    exists(path: string): Promise<boolean>;
-    remove(path: string): Promise<void>;
-    assetUrl(path: string): Promise<string>;
-    open(path: string): Promise<void>;
-    chooseDirectory(): Promise<string | null>;
-    chooseNotes?(): Promise<NoteSnapshot[]>;
-    readNote?(path: string): Promise<NoteSnapshot>;
-    appendNote?(path: string, text: string, expectedText: string): Promise<void>;
-}
-export interface HostSupport {
-    current(): VaultSession | null;
-    onChange(handler: (session: VaultSession | null) => void): Disposable;
-    onFileChange(handler: (event: {
-        vaultId: string;
-        path: string;
-        newPath?: string;
-        deleted?: boolean;
-    }) => void): Disposable;
-    openExternal(url: string): Promise<void>;
-    openSettings(): void;
-    openVaults(): void;
-    setBadge(value: number): void;
-    render?(url: string): Promise<ExtensionHttpResponse & { url: string }>;
-    fetch(url: string, binary?: boolean): Promise<ExtensionHttpResponse & {
-        url: string;
-    }>;
-}
-export type SubscriptionApi = ExtensionApi & {
-    subscriptions?: HostSupport;
-};
+import type { ExtensionApi, ExtensionContext, ExtensionSubscriptions, ExtensionVaultSession, ExtensionNoteSnapshot } from 'folyn-extension-sdk';
+export type NoteSnapshot = ExtensionNoteSnapshot;
+export type SubscriptionDataSession = ExtensionVaultSession['data'];
+export type VaultSession = ExtensionVaultSession;
+export type HostSupport = ExtensionSubscriptions;
+export type SubscriptionApi = ExtensionApi;
 export interface Host {
     api: SubscriptionApi;
     ctx: ExtensionContext;

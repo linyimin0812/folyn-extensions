@@ -31,8 +31,8 @@ describe('learning ownership in subscription lifecycle', () => {
         try {
             await vi.waitFor(() => expect(request).toBeTruthy());
             original.setDraft('Unsent follow-up A'); original.setNoteDraft('My own draft A'); original.setPrompt('A guidance');
-            const write = h.first.vault.writeText.bind(h.first.vault); let hold = true;
-            vi.spyOn(h.first.vault, 'writeText').mockImplementation(async (path, text) => { if (path === LEARNING_PATH && hold) { hold = false; await writing.promise; } await write(path, text); });
+            const write = h.first.vault.data.writeText.bind(h.first.vault); let hold = true;
+            vi.spyOn(h.first.vault.data, 'writeText').mockImplementation(async (path, text) => { if (path === LEARNING_PATH && hold) { hold = false; await writing.promise; } await write(path, text); });
             await service.switchVault(h.second.vault);
             const b = service.learning!.start({ ...snapshot, articleId: 'b-article', title: 'B article' }, 'notes'); service.learning!.setDraft('Unsent question B'); service.learning!.setNoteDraft('My own draft B');
             let returned = false; returning = service.switchVault(h.first.vault).then(() => { returned = true; });
@@ -43,7 +43,7 @@ describe('learning ownership in subscription lifecycle', () => {
             expect(restored.active!.messages[1]).toMatchObject({ content: 'First partial answer', status: 'cancelled' });
             request.onEvent({ type: 'text', content: ' ignored after switch' }); network.release(); await sending;
             expect(restored.active!.messages[1].content).toBe('First partial answer');
-            const storedB = JSON.parse(h.second.files.get(LEARNING_PATH) as string);
+            const storedB = JSON.parse(h.second.dataFiles.get(LEARNING_PATH) as string);
             expect(storedB.records[0]).toMatchObject({ id: b.id, draft: 'Unsent question B', noteDraft: 'My own draft B' });
             expect(JSON.stringify(storedB)).not.toContain('First partial answer');
         } finally { writing.release(); network.release(); await Promise.allSettled([returning, sending].filter(Boolean)); }
@@ -51,8 +51,8 @@ describe('learning ownership in subscription lifecycle', () => {
     it('restores an unsaved learning draft after switching Vault and makes explicit persistence retry durable', async () => {
         const { h, service, snapshot } = await setup(), controller = service.learning!;
         const record = controller.start(snapshot, 'notes'); controller.setNoteDraft('Do not discard these unsaved thoughts'); controller.setDraft('Also retain this question');
-        const write = h.first.vault.writeText.bind(h.first.vault); let failing = true;
-        vi.spyOn(h.first.vault, 'writeText').mockImplementation(async (path, text) => { if (path === LEARNING_PATH && failing) throw new Error('read-only learning state'); await write(path, text); });
+        const write = h.first.vault.data.writeText.bind(h.first.vault); let failing = true;
+        vi.spyOn(h.first.vault.data, 'writeText').mockImplementation(async (path, text) => { if (path === LEARNING_PATH && failing) throw new Error('read-only learning state'); await write(path, text); });
         await expect(controller.persist()).rejects.toThrow('read-only learning state');
         await service.switchVault(h.second.vault); await service.switchVault(h.first.vault);
         expect(service.learning!.active).toMatchObject({ id: record.id, noteDraft: 'Do not discard these unsaved thoughts', draft: 'Also retain this question' });
@@ -60,29 +60,29 @@ describe('learning ownership in subscription lifecycle', () => {
         failing = false; await service.learning!.persist(); expect(service.learning!.persistError).toBe('');
         await service.switchVault(h.second.vault); await service.switchVault(h.first.vault);
         expect(service.learning!.active!.noteDraft).toBe('Do not discard these unsaved thoughts');
-        expect(h.second.files.has(LEARNING_PATH)).toBe(false);
+        expect(h.second.dataFiles.has(LEARNING_PATH)).toBe(false);
     });
     it('keeps articles readable and the damaged file untouched when learning JSON cannot load', async () => {
-        const { h, service, snapshot, article } = await setup(); h.first.files.set(LEARNING_PATH, '{not-valid-json');
+        const { h, service, snapshot, article } = await setup(); h.first.dataFiles.set(LEARNING_PATH, '{not-valid-json');
         await service.switchVault(h.second.vault); await service.switchVault(h.first.vault);
         expect(service.repo!.state.articles).toHaveLength(2); expect(service.error).toBe('');
         expect((await service.repo!.body(service.repo!.state.articles.find(item => item.id === article.id)!))!.text).toBe(snapshot.text);
         expect(service.learning!.loadError).toContain('学习记录');
         service.learning!.start(snapshot, 'notes'); service.learning!.setNoteDraft('Preserved despite corrupt disk state');
         await expect(service.learning!.persist()).rejects.toThrow('学习记录');
-        expect(h.first.files.get(LEARNING_PATH)).toBe('{not-valid-json');
+        expect(h.first.dataFiles.get(LEARNING_PATH)).toBe('{not-valid-json');
         expect(service.learning!.active!.noteDraft).toBe('Preserved despite corrupt disk state');
     });
     it('retains material snapshots and learning notes after article caches are cleared and the source is removed', async () => {
         const { h, service, snapshot, article, source } = await setup(), controller = service.learning!;
         const record = controller.start(snapshot, 'notes'); controller.setNoteDraft('My independent understanding'); await controller.persist();
-        const stored = h.first.files.get(LEARNING_PATH);
+        const stored = h.first.dataFiles.get(LEARNING_PATH);
         await service.clear([article], true); expect(article.cache).toBeUndefined();
         expect(record.materials[0]).toMatchObject({ text: snapshot.text, quote: snapshot.quote, version: snapshot.version });
         await service.unsubscribe(source, false, false);
         expect(service.repo!.state.articles).toHaveLength(0); expect(service.repo!.state.sources).toHaveLength(0);
         expect(service.learning).toBe(controller); expect(controller.active!.noteDraft).toBe('My independent understanding');
-        expect(h.first.files.get(LEARNING_PATH)).toBe(stored);
+        expect(h.first.dataFiles.get(LEARNING_PATH)).toBe(stored);
     });
     it('updates learning subscribers during streaming without invalidating the article workspace', async () => {
         const { h, service, snapshot } = await setup(), controller = service.learning!;

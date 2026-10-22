@@ -119,7 +119,7 @@ describe('article image viewer', () => {
         const article = repo.state.articles[0], body = await service.loadBody(article);
         body.blocks = [{ id: 'images', html: '<p><img src="https://example.com/a.png" alt="独立图"><a href="https://example.com/original"><img src="https://example.com/a.png" alt="链接图"></a></p>' }];
         body.html = body.blocks[0].html;
-        body.images = [{ url: 'https://example.com/a.png', path: '.folyn/subscriptions/images/a.png' }];
+        body.images = [{ url: 'https://example.com/a.png', path: 'subscriptions/images/a.png' }];
         await repo.putBody(body);
         const external = vi.spyOn(h.host.support, 'openExternal').mockResolvedValue(undefined);
         const container = mountContainer();

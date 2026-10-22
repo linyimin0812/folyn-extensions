@@ -85,8 +85,8 @@ describe('explicit commits and add workflow', () => {
     });
     it('reports a background preview-cache failure without reversing a successful subscription', async () => {
         const { h, service, repo, candidate, preview } = await setup();
-        const write = h.first.vault.writeText.bind(h.first.vault);
-        vi.spyOn(h.first.vault, 'writeText').mockImplementation(async (path, value) => { if (path.includes('/bodies/')) throw new Error('body cache write failed'); return write(path, value); });
+        const write = h.first.vault.data.writeText.bind(h.first.vault);
+        vi.spyOn(h.first.vault.data, 'writeText').mockImplementation(async (path, value) => { if (path.includes('/bodies/')) throw new Error('body cache write failed'); return write(path, value); });
         await expect(service.add(candidate, '新来源', [], 20, 0, false, preview)).resolves.toBeUndefined();
         await flush();
         expect(repo.state.sources).toHaveLength(1); expect(repo.state.articles).toHaveLength(2);
@@ -103,7 +103,7 @@ describe('explicit commits and add workflow', () => {
             const removing = service.unsubscribe(source, false, false);
             pending.release(); await Promise.all([adding, removing]); await flush();
             expect(repo.state.sources).toHaveLength(0); expect(repo.state.articles).toHaveLength(0);
-            expect([...h.first.files.keys()].some(path => path.startsWith(`${ROOT}/images/${a.id}`) || path.startsWith(`${ROOT}/bodies/${a.id}`))).toBe(false);
+            expect([...h.first.dataFiles.keys()].some(path => path.startsWith(`${ROOT}/images/${a.id}`) || path.startsWith(`${ROOT}/bodies/${a.id}`))).toBe(false);
         } finally { pending.release(); await adding; }
     });
     it('does not write late preview images or completion messages into the next Vault', async () => {
@@ -121,10 +121,10 @@ describe('explicit commits and add workflow', () => {
         const { h, service, repo } = await added(), article = repo.state.articles[0];
         article.cache = { ...article.cache!, images: 2, missing: 1, unsupported: true, pending: true, processed: 1 };
         await repo.persist();
-        const stored = h.first.files.get(`${ROOT}/state.json`), fetch = vi.spyOn(h.host.support, 'fetch');
+        const stored = h.first.dataFiles.get(`${ROOT}/state.json`), fetch = vi.spyOn(h.host.support, 'fetch');
         const reloaded = new Repository(h.first.vault); await reloaded.load();
         expect(reloaded.state.articles[0].cache).toMatchObject({ images: 2, missing: 1, unsupported: true, pending: false, processed: 1 });
-        expect(fetch).not.toHaveBeenCalled(); expect(h.first.files.get(`${ROOT}/state.json`)).toBe(stored);
+        expect(fetch).not.toHaveBeenCalled(); expect(h.first.dataFiles.get(`${ROOT}/state.json`)).toBe(stored);
         expect(service.downloading.size).toBe(0);
     });
     it('drains an interrupted preview task before returning to its Vault and clears its orphaned pending flag', async () => {
@@ -136,7 +136,7 @@ describe('explicit commits and add workflow', () => {
             await service.add(candidate, '旧 Vault 来源', [], 20, 0, false, preview);
             const article = repo.state.articles[0];
             expect(article.cache).toMatchObject({ pending: true, missing: 1 });
-            expect(JSON.parse(h.first.files.get(`${ROOT}/state.json`) as string).articles[0].cache.pending).toBe(true);
+            expect(JSON.parse(h.first.dataFiles.get(`${ROOT}/state.json`) as string).articles[0].cache.pending).toBe(true);
             await service.switchVault(h.second.vault);
             const callsBeforeReturn = requests.mock.calls.length;
             let returned = false;

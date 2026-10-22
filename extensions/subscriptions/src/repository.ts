@@ -1,21 +1,24 @@
-import type { VaultSession } from './host';
+import type { SubscriptionDataSession, VaultSession } from './host';
 import type { State, Source, Body, Translation, Article } from './model';
 import { freshState } from './model';
 import { normalizeGroups } from './groups';
 import { LearningRepository } from './learning';
 type StoredState = Omit<State, 'schema' | 'sources'> & { schema: number; sources: (Omit<Source, 'groups'> & { group?: unknown; groups?: unknown })[] };
-export const ROOT = '.folyn/subscriptions';
+// Paths are relative to ~/.folyn/subscriptions/<vaultId>, not the user Vault.
+export const ROOT = 'subscriptions';
 export class Repository {
     state: State = freshState();
     readonly learning: LearningRepository;
     private writes: Promise<void> = Promise.resolve();
     private bodies = new Map<string, Body>();
+    readonly data: SubscriptionDataSession;
     constructor(readonly vault: VaultSession) {
+        this.data = vault.data;
         this.learning = new LearningRepository(vault);
     }
     async load() {
-        if (await this.vault.exists(`${ROOT}/state.json`)) {
-            const value = JSON.parse(await this.vault.readText(`${ROOT}/state.json`)) as StoredState;
+        if (await this.data.exists(`${ROOT}/state.json`)) {
+            const value = JSON.parse(await this.data.readText(`${ROOT}/state.json`)) as StoredState;
             if (![1, 2].includes(value.schema) || !Array.isArray(value.sources) || !Array.isArray(value.articles)
                 || !Array.isArray(value.groups) || value.groups.some(name => typeof name !== 'string')
                 || !Array.isArray(value.collapsed) || value.collapsed.some(name => typeof name !== 'string'))
@@ -44,7 +47,7 @@ export class Repository {
     persist(): Promise<void> {
         const snapshot = JSON.stringify(this.state);
         const next = this.writes.catch(() => {
-        }).then(() => this.vault.writeText(`${ROOT}/state.json`, snapshot));
+        }).then(() => this.data.writeText(`${ROOT}/state.json`, snapshot));
         this.writes = next;
         return next;
     }
@@ -55,19 +58,19 @@ export class Repository {
         if (this.bodies.has(key))
             return this.bodies.get(key);
         const path = `${ROOT}/bodies/${key}.json`;
-        if (!await this.vault.exists(path))
+        if (!await this.data.exists(path))
             return undefined;
-        const body = JSON.parse(await this.vault.readText(path)) as Body;
+        const body = JSON.parse(await this.data.readText(path)) as Body;
         this.bodies.set(key, body);
         return body;
     }
     async bodyAt(articleId: string, version: string): Promise<Body | undefined> {
         const path = `${ROOT}/bodies/${articleId}/${version}.json`;
-        return await this.vault.exists(path) ? JSON.parse(await this.vault.readText(path)) as Body : undefined;
+        return await this.data.exists(path) ? JSON.parse(await this.data.readText(path)) as Body : undefined;
     }
     async putBody(body: Body) {
         const key = `${body.articleId}/${body.version}`;
-        await this.vault.writeText(`${ROOT}/bodies/${key}.json`, JSON.stringify(body));
+        await this.data.writeText(`${ROOT}/bodies/${key}.json`, JSON.stringify(body));
         this.bodies.set(key, body);
     }
     translationPath(a: Article, version: string, language: string) {
@@ -75,21 +78,21 @@ export class Repository {
     }
     async translation(a: Article, version: string, language: string): Promise<Translation | undefined> {
         const path = this.translationPath(a, version, language);
-        return await this.vault.exists(path) ? JSON.parse(await this.vault.readText(path)) as Translation : undefined;
+        return await this.data.exists(path) ? JSON.parse(await this.data.readText(path)) as Translation : undefined;
     }
     async putTranslation(a: Article, t: Translation) {
-        await this.vault.writeText(this.translationPath(a, t.version, t.language), JSON.stringify(t));
+        await this.data.writeText(this.translationPath(a, t.version, t.language), JSON.stringify(t));
     }
     async clear(articles: Article[], translations: boolean) {
         for (const a of articles) {
-            await this.vault.remove(`${ROOT}/images/${a.id}`);
-            await this.vault.remove(`${ROOT}/bodies/${a.id}`);
+            await this.data.remove(`${ROOT}/images/${a.id}`);
+            await this.data.remove(`${ROOT}/bodies/${a.id}`);
             this.bodies.forEach((_, k) => {
                 if (k.startsWith(a.id + '/'))
                     this.bodies.delete(k);
             });
             if (translations) {
-                await this.vault.remove(`${ROOT}/translations/${a.id}`);
+                await this.data.remove(`${ROOT}/translations/${a.id}`);
                 delete a.translationVersion;
             }
             delete a.cache;

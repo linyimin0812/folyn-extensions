@@ -3,9 +3,19 @@ import type { ExtensionContext } from 'folyn-extension-sdk';
 import { article, feed, staticList, dynamicList } from './fixtures';
 export function memoryVault(id = 'vault-a') {
     const files = new Map<string, string | Uint8Array>();
+    const dataFiles = new Map<string, string | Uint8Array>();
+    const data = {
+        async exists(path: string) { return dataFiles.has(path); },
+        async readText(path: string) { const v = dataFiles.get(path); if (typeof v !== 'string') throw new Error('missing'); return v; },
+        async readBinary(path: string) { const v = dataFiles.get(path); if (!(v instanceof Uint8Array)) throw new Error('missing'); return v; },
+        async writeText(path: string, value: string) { dataFiles.set(path, value); },
+        async writeBinary(path: string, value: Uint8Array) { dataFiles.set(path, value); },
+        async remove(path: string) { for (const k of dataFiles.keys()) if (k === path || k.startsWith(path + '/')) dataFiles.delete(k); },
+        async assetUrl(path: string) { return `https://assets.invalid/${id}/data/${path}`; },
+    };
     files.set('Notes', 'directory');
     const snapshot = async (path: string) => ({ path, title: path.split('/').pop()!.replace(/\.md$/i, ''), text: await vault.readText(path) });
-    const vault: VaultSession = { id, name: id,
+    const vault: VaultSession = { id, name: id, data,
         async exists(path) {
             return files.has(path);
         },
@@ -49,7 +59,7 @@ export function memoryVault(id = 'vault-a') {
             return 'Notes';
         },
     };
-    return { vault, files };
+    return { vault, files, dataFiles };
 }
 export function harness() {
     const first = memoryVault(), second = memoryVault('vault-b');

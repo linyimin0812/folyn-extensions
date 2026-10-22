@@ -78,7 +78,7 @@ pnpm dev --port 4178
 
 ## 存储与限制
 
-数据位于所属 Vault 的 `.folyn/subscriptions/`：`state.json` 保存元信息，`bodies/`、`images/`、`translations/` 保存版本化缓存；`learning/state.json` 独立保存学习记录、材料快照与草稿，缓存清理及取消订阅不删除它。插件卸载不主动移除这些数据。正式保存的文档及其 `assets/<保存ID>/` 附件不依赖缓存目录。
+数据位于 `~/.folyn/subscriptions/<vaultId>/subscriptions/`：`state.json` 保存元信息，`bodies/`、`images/`、`translations/` 保存版本化缓存；`learning/state.json` 独立保存学习记录、材料快照与草稿，缓存清理及取消订阅不删除它。插件卸载不主动移除这些数据。正式保存的文档及其 `assets/<保存ID>/` 附件不依赖缓存目录。
 
 0.2.0 使用 schema 2，将来源分组存为数组。读取旧 schema 1 时转换原有单分组，下一次正常保存时写入新格式；转换保留文章、缓存及保存文件信息。
 

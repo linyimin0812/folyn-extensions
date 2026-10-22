@@ -128,7 +128,7 @@ describe('learning records and explicit AI requests', () => {
                 if (index === 3) controller.setNoteDraft('My thought typed during the live answer');
             }
             expect(controller.busy).toBe(true);
-            const snapshot = JSON.parse(h.first.files.get(LEARNING_PATH) as string).records[0];
+            const snapshot = JSON.parse(h.first.dataFiles.get(LEARNING_PATH) as string).records[0];
             expect(snapshot.messages[1].status).toBe('streaming');
             expect(snapshot.messages[1].content).toContain('part-4');
             expect(snapshot.noteDraft).toBe('My thought typed during the live answer');
@@ -157,24 +157,24 @@ describe('learning records and explicit AI requests', () => {
 describe('learning persistence and note ownership', () => {
     it('retains drafts on write failure and serializes later snapshots reliably', async () => {
         const { controller, repository, h } = await setup(); controller.start(input()); controller.setDraft('keep question'); controller.setNoteDraft('keep my own words');
-        const write = h.first.vault.writeText.bind(h.first.vault);
-        vi.spyOn(h.first.vault, 'writeText').mockRejectedValueOnce(new Error('disk unavailable'));
+        const write = h.first.vault.data.writeText.bind(h.first.vault);
+        vi.spyOn(h.first.vault.data, 'writeText').mockRejectedValueOnce(new Error('disk unavailable'));
         await expect(controller.persist()).rejects.toThrow('disk unavailable'); expect(controller.persistError).toContain('disk unavailable'); expect(controller.active!.noteDraft).toBe('keep my own words');
         await controller.persist(); expect(controller.persistError).toBe('');
         const pending = gate(), writes: string[] = []; let calls = 0;
-        vi.spyOn(h.first.vault, 'writeText').mockImplementation(async (path, content) => { writes.push(content); if (++calls === 1) await pending.promise; await write(path, content); });
+        vi.spyOn(h.first.vault.data, 'writeText').mockImplementation(async (path, content) => { writes.push(content); if (++calls === 1) await pending.promise; await write(path, content); });
         controller.setDraft('first snapshot'); const first = controller.persist(); controller.setDraft('second snapshot'); const second = controller.persist();
         try { await flush(); expect(writes).toHaveLength(1); pending.release(); await Promise.all([first, second]); }
         finally { pending.release(); }
-        await repository.drain(); expect(JSON.parse(h.first.files.get(LEARNING_PATH) as string).records[0].draft).toBe('second snapshot');
+        await repository.drain(); expect(JSON.parse(h.first.dataFiles.get(LEARNING_PATH) as string).records[0].draft).toBe('second snapshot');
     });
     it('keeps malformed learning files read-only without preventing subscriptions from loading', async () => {
-        const { h, chat } = await setup(); h.first.files.set(LEARNING_PATH, '{unfinished-json');
+        const { h, chat } = await setup(); h.first.dataFiles.set(LEARNING_PATH, '{unfinished-json');
         const subscriptions = new Repository(h.first.vault); await expect(subscriptions.load()).resolves.toBeUndefined();
         expect(subscriptions.learning.loadError).toContain('学习记录');
         const controller = new LearningController(h.host, subscriptions.learning); controllers.push(controller); controller.start(input()); controller.setNoteDraft('recoverable in-memory draft');
         await expect(controller.persist()).rejects.toThrow('学习记录'); expect(controller.active!.noteDraft).toBe('recoverable in-memory draft');
-        expect(h.first.files.get(LEARNING_PATH)).toBe('{unfinished-json'); expect(chat).not.toHaveBeenCalled();
+        expect(h.first.dataFiles.get(LEARNING_PATH)).toBe('{unfinished-json'); expect(chat).not.toHaveBeenCalled();
     });
     it('does not start paid AI work when the question cannot be durably recorded', async () => {
         const { controller, repository, chat } = await setup(); controller.start(input()); controller.setDraft('Retain this failed submission');
@@ -215,7 +215,7 @@ describe('learning persistence and note ownership', () => {
             let disposed = false; disposing = controller.dispose().then(() => { disposed = true; });
             await flush(); expect(disposed).toBe(false);
             writing.release(); const path = await saving; await disposing;
-            const saved = JSON.parse(h.first.files.get(LEARNING_PATH) as string); expect(saved.records[0].savedNotes[0].path).toBe(path); expect(saved.records[0].messages[1].status).toBe('cancelled');
+            const saved = JSON.parse(h.first.dataFiles.get(LEARNING_PATH) as string); expect(saved.records[0].savedNotes[0].path).toBe(path); expect(saved.records[0].messages[1].status).toBe('cancelled');
             expect(saved.records[0].noteDraft).toBe('Keep this thought'); expect([...h.second.files.keys()]).toEqual(['Notes']);
             params.onEvent({ type: 'text', content: ' ignored' }); expect(controller.state.records[0].messages[1].content).toBe('Partial');
         } finally { writing.release(); network.release(); await Promise.allSettled([saving, disposing, sending].filter(Boolean)); }

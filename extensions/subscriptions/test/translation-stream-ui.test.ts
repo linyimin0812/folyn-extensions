@@ -105,7 +105,7 @@ describe('live whole-article translation', () => {
     });
     it('throttles preview updates and does not write the cache on every token', async () => {
         const { h, service, begin, getRequest, end, repo, article, body } = await setup(); await begin();
-        const write = vi.spyOn(h.first.vault, 'writeText'), before = service.revision;
+        const write = vi.spyOn(h.first.vault.data, 'writeText'), before = service.revision;
         await act(async () => {
             getRequest().onEvent({ type: 'text', content: '首字' });
             for (let i = 0; i < 100; i++) getRequest().onEvent({ type: 'text', content: '字' });
@@ -119,7 +119,7 @@ describe('live whole-article translation', () => {
     it('keeps translated and original image nodes mounted while streamed prose grows', async () => {
         const { repo, body, container, begin, emit, end } = await setup();
         body.blocks.unshift({ id: 'picture', html: '<p><img src="https://example.com/stable.png" alt="Stable image"></p>' });
-        body.images = [{ url: 'https://example.com/stable.png', path: '.folyn/subscriptions/images/stable.png' }];
+        body.images = [{ url: 'https://example.com/stable.png', path: 'subscriptions/images/stable.png' }];
         await repo.putBody(body);
         await begin(); await emit('FOLYNKEEP0END\n\n已经返回的正文');
         const translated = container.querySelector('.document-result img')!;

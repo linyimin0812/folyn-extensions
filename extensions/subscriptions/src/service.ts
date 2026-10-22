@@ -538,8 +538,9 @@ export class Subscriptions {
         // which do not yet record the byte size of each image.
         for (const image of body.images) if (image.path) {
             check();
-            if (await repo.vault.exists(image.path)) {
-                image.bytes ??= (await repo.vault.readBinary(image.path)).byteLength;
+            if (await repo.data.exists(image.path)) {
+                const bytes = (await repo.data.readBinary(image.path)).byteLength;
+                image.bytes ??= bytes;
                 total += image.bytes; processed++; delete image.error;
             } else { delete image.path; delete image.bytes; }
         }
@@ -564,7 +565,7 @@ export class Subscriptions {
                     // not consume the remaining budget for smaller images.
                     reserved = raw.length; total += reserved;
                     const path = `${ROOT}/images/${a.id}/${body.version}-${index}.${mime.split('/')[1]}`;
-                    await repo.vault.writeBinary(path, Uint8Array.from(raw, c => c.charCodeAt(0)));
+                    await repo.data.writeBinary(path, Uint8Array.from(raw, c => c.charCodeAt(0)));
                     check(); image.path = path; image.mime = mime; image.bytes = raw.length;
                 } catch (e) {
                     total -= reserved;
@@ -672,7 +673,7 @@ export class Subscriptions {
         const root = htmlDoc(html, 'https://reader.invalid').body;
         highlightCodeBlocks(root);
         for (const image of body.images) {
-            const url = image.path ? await repo.vault.assetUrl(image.path) : undefined;
+            const url = image.path ? await repo.data.assetUrl(image.path) : undefined;
             root.querySelectorAll('img').forEach(el => {
                 if (el.getAttribute('src') === image.url) {
                     if (url)
@@ -883,7 +884,7 @@ export class Subscriptions {
             for (const [i, img] of body.images.entries())
                 if (img.path) {
                     const name = `image-${i + 1}.${img.mime?.split('/')[1] || 'png'}`;
-                    await repo.vault.writeBinary(`${attachmentDir}/${name}`, await repo.vault.readBinary(img.path));
+                    await repo.vault.writeBinary(`${attachmentDir}/${name}`, await repo.data.readBinary(img.path));
                     imagePaths.set(img.url, `assets/${saveId}/${name}`);
                 }
             const usable = t ? { ...t, values: Object.fromEntries(Object.entries(t.values).filter(([key]) => !t.pending?.includes(key))) } : undefined;

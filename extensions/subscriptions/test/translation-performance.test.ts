@@ -36,7 +36,7 @@ describe('translation scheduling performance', () => {
             await new Promise(resolve => setTimeout(resolve, 100));
             await original(request); active--;
         });
-        const write = vi.spyOn(h.first.vault, 'writeText');
+        const write = vi.spyOn(h.first.vault.data, 'writeText');
         const started = Date.now();
         const task = service.translate(article, body, { provider: 'mock', model: 'test' }).then(() => { elapsed = Date.now() - started; });
         await vi.advanceTimersByTimeAsync(3000); await task;
@@ -129,7 +129,7 @@ describe('translation scheduling performance', () => {
         await service.switchVault(h.second.vault);
         slow.release(); await Promise.all(tasks);
         expect(calls).toBe(2);
-        expect([...h.second.files.keys()].some(path => path.includes('/translations/'))).toBe(false);
+        expect([...h.second.dataFiles.keys()].some(path => path.includes('/translations/'))).toBe(false);
         for (const [a, b] of [[article, body], [other, otherBody]] as const) {
             const cached = await repo.translation(a, b.version, 'zh-CN');
             expect(cached?.cancelled).toBe(true);
@@ -165,8 +165,8 @@ describe('translation scheduling performance', () => {
             if (++calls > 1) await slow.promise;
             await original(request);
         });
-        const write = h.first.vault.writeText;
-        vi.spyOn(h.first.vault, 'writeText').mockImplementation(async (path, value) => {
+        const write = h.first.vault.data.writeText;
+        vi.spyOn(h.first.vault.data, 'writeText').mockImplementation(async (path, value) => {
             if (path.includes('/translations/')) { failed.release(); throw new Error('disk full'); }
             return write(path, value);
         });

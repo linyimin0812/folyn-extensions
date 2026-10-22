@@ -32,10 +32,10 @@ describe('article image caching', () => {
         expect(image).toMatchObject({ url, mime: 'image/png', bytes: 141725 });
         expect(image.error).toBeUndefined();
         expect(image.path).toMatch(/\.png$/);
-        expect(Array.from(await h.first.vault.readBinary(image.path!))).toEqual(Array.from(bytes));
+        expect(Array.from(await h.first.vault.data.readBinary(image.path!))).toEqual(Array.from(bytes));
         expect(a.cache).toMatchObject({ missing: 0, pending: false });
         const rendered = htmlDoc(await service.imageHtml(repo, body.html, body), a.url);
-        expect(rendered.querySelector('img')?.getAttribute('src')).toBe(await h.first.vault.assetUrl(image.path!));
+        expect(rendered.querySelector('img')?.getAttribute('src')).toBe(await h.first.vault.data.assetUrl(image.path!));
         expect(rendered.querySelector('.image-unavailable')).toBeNull();
     });
     it('shows counts and retry controls while preserving already displayed image nodes', async () => {

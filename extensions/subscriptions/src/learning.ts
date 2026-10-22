@@ -1,11 +1,11 @@
 import type { ExtensionAiPair } from 'folyn-extension-sdk';
-import type { Host, VaultSession } from './host';
+import type { Host, SubscriptionDataSession, VaultSession } from './host';
 import type { LearningArticleInput, LearningMaterial, LearningMaterialScope, LearningMessage, LearningNoteInput, LearningRecord, LearningRequestScope, LearningScene, LearningSelection, LearningState, LearningTab } from './learning-model';
 import { emptyLearningState, learningScenePrompts } from './learning-model';
 import { id, message, now } from './model';
 import { canonical, digest, relativePath, safeName } from './urls';
 
-export const LEARNING_PATH = '.folyn/subscriptions/learning/state.json';
+export const LEARNING_PATH = 'subscriptions/learning/state.json';
 export const LEARNING_LIMITS = { materials: 24000, history: 8000, question: 6000, prompt: 3000, response: 160000, materialCount: 12 } as const;
 
 export function noteHasSource(draft: string, key: string): boolean {
@@ -57,11 +57,12 @@ export class LearningRepository {
     persistError = '';
     loadError = '';
     private writes: Promise<void> = Promise.resolve();
-    constructor(readonly vault: VaultSession) {}
+    readonly data: SubscriptionDataSession;
+    constructor(readonly vault: VaultSession) { this.data = vault.data; }
     async load() {
         try {
-        if (!await this.vault.exists(LEARNING_PATH)) { this.loadError = ''; return; }
-        const value = JSON.parse(await this.vault.readText(LEARNING_PATH)) as LearningState;
+        if (!await this.data.exists(LEARNING_PATH)) { this.loadError = ''; return; }
+        const value = JSON.parse(await this.data.readText(LEARNING_PATH)) as LearningState;
         if (value.schema !== 1 || !Array.isArray(value.records) || value.records.some(record => !record || typeof record.id !== 'string' || typeof record.draft !== 'string' || typeof record.noteDraft !== 'string' || typeof record.prompt !== 'string' || !Array.isArray(record.materials) || !Array.isArray(record.messages) || !Array.isArray(record.savedNotes)
             || record.materials.some(material => !material || typeof material.id !== 'string' || typeof material.text !== 'string')
             || record.messages.some(item => !item || typeof item.id !== 'string' || typeof item.content !== 'string')))
@@ -80,7 +81,7 @@ export class LearningRepository {
         if (this.loadError) return Promise.reject(new Error(this.loadError));
         const snapshot = JSON.stringify(this.state);
         const next = this.writes.catch(() => {}).then(async () => {
-            try { await this.vault.writeText(LEARNING_PATH, snapshot); this.persistError = ''; }
+            try { await this.data.writeText(LEARNING_PATH, snapshot); this.persistError = ''; }
             catch (error) { this.persistError = `学习记录尚未保存：${message(error)}`; throw error; }
         });
         this.writes = next;

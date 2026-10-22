@@ -31,15 +31,15 @@ describe('sources and persistence', () => {
         const { h, s } = await setup();
         const source = await add(s);
         const repo = s.repo!, ids = repo.state.articles.map(a => a.id);
-        const remove = h.first.vault.remove;
-        h.first.vault.remove = async () => { throw new Error('Operation not permitted (os error 1)'); };
+        const remove = h.first.vault.data.remove;
+        h.first.vault.data.remove = async () => { throw new Error('Operation not permitted (os error 1)'); };
         await expect(s.unsubscribe(source, false, false)).rejects.toThrow('Operation not permitted (os error 1)');
         expect(repo.state.sources).toContain(source);
         expect(repo.state.articles.map(a => a.id)).toEqual(ids);
         expect(repo.state.articles.every(a => a.sourceIds.includes(source.id))).toBe(true);
         const reloaded = new Repository(h.first.vault); await reloaded.load();
         expect(reloaded.state.sources.some(s => s.id === source.id)).toBe(true);
-        h.first.vault.remove = remove;
+        h.first.vault.data.remove = remove;
         await s.unsubscribe(source, false, false);
         expect(repo.state.sources).toHaveLength(0); expect(repo.state.articles).toHaveLength(0);
     });
@@ -293,7 +293,7 @@ describe('body, translation and saving', () => {
         release({ url: a.url, status: 200, headers: {}, body: article() });
         await expect(task).rejects.toThrow('取消');
         expect(s.repo!.state.articles).toHaveLength(0);
-        expect([...h.second.files.keys()].some(k => k.startsWith(ROOT))).toBe(false);
+        expect([...h.second.dataFiles.keys()].some(k => k.startsWith(ROOT))).toBe(false);
     });
     it('A37 saving continues only into the captured original vault after a switch', async () => {
         const { h, s } = await setup();

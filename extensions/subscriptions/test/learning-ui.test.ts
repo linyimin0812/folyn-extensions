@@ -155,7 +155,7 @@ describe('real subscription learning workflow', () => {
         const text = '我的理解：任务的归属应在启动时固定。';
         await setValue(panel().querySelector<HTMLTextAreaElement>('#fsub-learning-thought')!, text);
         await act(async () => { await new Promise(resolve => setTimeout(resolve, 280)); });
-        expect(JSON.parse(String(h.first.files.get(LEARNING_PATH))).records[0].noteDraft).toBe(text);
+        expect(JSON.parse(String(h.first.dataFiles.get(LEARNING_PATH))).records[0].noteDraft).toBe(text);
         await act(async () => { button('关闭伴读').click(); }); await flush();
         expect(container.querySelector('#fsub-learning')).toBeNull();
         await open();
@@ -381,8 +381,8 @@ describe('real subscription learning workflow', () => {
     it('keeps an unsaved thought editable and retries persistence beside the input', async () => {
         const { h, chat, button, panel, open, notes } = await setup();
         await open(); await notes();
-        const write = h.first.vault.writeText.bind(h.first.vault); let failed = false;
-        vi.spyOn(h.first.vault, 'writeText').mockImplementation(async (path, value) => {
+        const write = h.first.vault.data.writeText.bind(h.first.vault); let failed = false;
+        vi.spyOn(h.first.vault.data, 'writeText').mockImplementation(async (path, value) => {
             if (path === LEARNING_PATH && !failed) { failed = true; throw new Error('Vault is temporarily read-only'); }
             return write(path, value);
         });
@@ -392,7 +392,7 @@ describe('real subscription learning workflow', () => {
         expect(panel().querySelector('.learning-status')?.textContent).toContain('学习记录尚未保存');
         expect(panel().querySelector<HTMLTextAreaElement>('#fsub-learning-thought')!.value).toBe(text);
         await act(async () => { button('重试保存').click(); });
-        expect(JSON.parse(String(h.first.files.get(LEARNING_PATH))).records[0].noteDraft).toBe(text);
+        expect(JSON.parse(String(h.first.dataFiles.get(LEARNING_PATH))).records[0].noteDraft).toBe(text);
         expect(panel().querySelector('.learning-status')).toBeNull();
         expect(chat).not.toHaveBeenCalled();
     });

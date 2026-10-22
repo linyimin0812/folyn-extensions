@@ -19,7 +19,7 @@ describe('wechat article captured 2026-10-21', () => {
             const article = await s.addArticle(preview);
             expect(article.sourceIds).toEqual([]);
             // Lazy-loaded WeChat images use data-src; the normalizer must surface them.
-            expect((await h.first.vault.exists('.folyn/subscriptions/bodies/' + article.id + '/' + article.cache!.version + '.json'))).toBe(true);
+            expect((await h.first.vault.data.exists('subscriptions/bodies/' + article.id + '/' + article.cache!.version + '.json'))).toBe(true);
         }
         finally {
             await s.stop();

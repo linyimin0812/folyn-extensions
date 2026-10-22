@@ -62,20 +62,20 @@ describe('multiple source groups', () => {
         expect(JSON.stringify(state.articles)).toBe(kept);
     });
     it('loads legacy single groups without touching files and saves only the new format', async () => {
-        const { vault, files } = memoryVault();
+        const { vault, files, dataFiles } = memoryVault();
         const state = freshState();
         state.groups = ['工程'];
         state.articles = [article(['a'])];
         const legacy = { ...state, schema: 1, sources: [{ ...source('a', []), groups: undefined, group: '工程' }, { ...source('b', []), groups: undefined, group: '' }] };
         const text = JSON.stringify(legacy);
-        files.set(`${ROOT}/state.json`, text);
+        dataFiles.set(`${ROOT}/state.json`, text);
         files.set('Notes/kept.md', 'user edits');
-        files.set(`${ROOT}/bodies/article/version.json`, 'cached body');
+        dataFiles.set(`${ROOT}/bodies/article/version.json`, 'cached body');
         const repo = new Repository(vault);
         await repo.load();
         expect(repo.state.schema).toBe(2);
         expect(repo.state.sources.map(source => source.groups)).toEqual([['工程'], []]);
-        expect(files.get(`${ROOT}/state.json`)).toBe(text);
+        expect(dataFiles.get(`${ROOT}/state.json`)).toBe(text);
         expect(repo.state.articles).toEqual(state.articles);
         await repo.persist();
         const reloaded = new Repository(vault);
@@ -83,7 +83,7 @@ describe('multiple source groups', () => {
         expect(reloaded.state).toEqual(repo.state);
         expect(reloaded.state.sources[0]).not.toHaveProperty('group');
         expect(files.get('Notes/kept.md')).toBe('user edits');
-        expect(files.get(`${ROOT}/bodies/article/version.json`)).toBe('cached body');
+        expect(dataFiles.get(`${ROOT}/bodies/article/version.json`)).toBe('cached body');
     });
     it('imports one source once, persists multiple groups and isolates Vaults', async () => {
         const h = harness();
