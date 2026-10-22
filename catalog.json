@@ -265,7 +265,7 @@
         "de": "Abonnements",
         "es": "Suscripciones"
       },
-      "version": "0.0.1",
+      "version": "0.0.2",
       "description": {
         "zh": "博客与网站订阅：离线阅读、流式翻译、选段追问与笔记。需要包含订阅接口更新的 Folyn 宿主。",
         "en": "Blog and website subscriptions with offline reading, streaming translation, selected-passage chat and notes. Requires Folyn with the subscriptions host API update.",
@@ -277,7 +277,7 @@
       "tier": "trusted",
       "author": "yiminlin",
       "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\"><circle cx=\"5\" cy=\"19\" r=\"1\"/><path d=\"M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16\"/></svg>",
-      "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/folyn-subscriptions-0.0.1/folyn-subscriptions.zip"
+      "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/folyn-subscriptions-0.0.2/folyn-subscriptions.zip"
     }
   ]
 }
