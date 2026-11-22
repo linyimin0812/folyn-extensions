@@ -28,7 +28,7 @@
     {
       "id": "folyn-dbml",
       "name": "DBML",
-      "version": "0.1.1",
+      "version": "0.2.0",
       "description": {
         "zh": "DBML 数据库建模：CodeMirror 编辑 + ER 图实时预览",
         "en": "DBML database modeling: CodeMirror editor + live ER diagram preview",
@@ -40,7 +40,7 @@
       "tier": "trusted",
       "author": "Folyn",
       "icon": "<svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n<path d=\"M8 1.5C4.96243 1.5 2.5 2.44143 2.5 3.60275V12.4343C2.5 13.5956 4.96243 14.537 8 14.537C11.0376 14.537 13.5 13.5956 13.5 12.4343V3.60275C13.5 2.44143 11.0376 1.5 8 1.5Z\" fill=\"#FAF5FF\"/>\n<ellipse cx=\"8\" cy=\"3.60275\" rx=\"5.5\" ry=\"2.10275\" stroke=\"#834DF0\"/>\n<path d=\"M13.5 12.4336C13.5 13.5949 11.0376 14.5363 8 14.5363C4.96243 14.5363 2.5 13.5949 2.5 12.4336\" stroke=\"#834DF0\"/>\n<path d=\"M13.5 9.49045C13.5 10.6518 11.0376 11.5932 8 11.5932C4.96243 11.5932 2.5 10.6518 2.5 9.49045\" stroke=\"#834DF0\"/>\n<path d=\"M13.5 6.54688C13.5 7.70819 11.0376 8.64962 8 8.64962C4.96243 8.64962 2.5 7.70819 2.5 6.54688\" stroke=\"#834DF0\"/>\n<path d=\"M13.5 3.39249V12.5184\" stroke=\"#834DF0\"/>\n<path d=\"M2.5 3.39249V12.5184\" stroke=\"#834DF0\"/>\n</svg>",
-      "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/0.0.2/folyn-dbml-0.1.1.zip"
+      "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/folyn-dbml-0.2.0/folyn-dbml-0.2.0.zip"
     },
     {
       "id": "folyn-file-viewer",
@@ -193,7 +193,7 @@
         "zh": "GitHub 采集器",
         "en": "GitHub Collector"
       },
-      "version": "0.1.0",
+      "version": "0.2.0",
       "description": {
         "zh": "GitHub 活动采集器：轮询读取 GitHub 事件流（提交/PR/Issue），写入活动时间线",
         "en": "GitHub activity collector: polls the GitHub event stream (commits/PRs/Issues) into the activity timeline"
@@ -202,7 +202,7 @@
       "tier": "trusted",
       "author": "Folyn",
       "icon": "G",
-      "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/0.0.2/folyn-github-collector-0.1.0.zip"
+      "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/folyn-github-collector-0.2.0/folyn-github-collector-0.2.0.zip"
     },
     {
       "id": "folyn-window-activity-collector",
@@ -210,7 +210,7 @@
         "zh": "窗口活动采集器",
         "en": "Window Activity Collector"
       },
-      "version": "0.1.0",
+      "version": "0.3.0",
       "description": {
         "zh": "窗口活动采集器：定时采样前台应用与窗口标题写入活动时间线。macOS 首次采集会触发系统自动化权限弹窗",
         "en": "Window activity collector: samples the foreground app and window title into the activity timeline. macOS triggers an Automation permission prompt on first collection"
@@ -219,7 +219,7 @@
       "tier": "trusted",
       "author": "Folyn",
       "icon": "W",
-      "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/0.0.2/folyn-window-activity-collector-0.1.0.zip"
+      "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/folyn-window-activity-collector-0.3.0/folyn-window-activity-collector-0.3.0.zip"
     },
     {
       "id": "folyn-file-collector",
@@ -228,7 +228,7 @@
         "zh": "文件采集器",
         "en": "File Collector"
       },
-      "version": "0.1.0",
+      "version": "0.3.0",
       "description": {
         "zh": "轮询 vault 文件的新增/修改/删除，采集文件内容与行级差异，支持排除目录与 AI 事件摘要",
         "en": "Polls vault files for created/modified/deleted events with content and line diffs, exclude dirs, optional AI event summaries"
@@ -236,7 +236,7 @@
       "tier": "trusted",
       "author": "Folyn",
       "icon": "F",
-      "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/folyn-file-collector-0.1.0/folyn-file-collector-0.1.0.zip"
+      "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/folyn-file-collector-0.3.0/folyn-file-collector-0.3.0.zip"
     },
     {
       "id": "folyn-email-collector",
@@ -245,7 +245,7 @@
         "zh": "邮件采集器",
         "en": "Email Collector"
       },
-      "version": "0.1.1",
+      "version": "0.3.0",
       "description": {
         "zh": "轮询多个自定义 IMAP 邮箱（QQ/163/Gmail 等任意 IMAPS 服务器），将新邮件写入活动时间线（poll 模式，TLS）",
         "en": "Polls multiple custom IMAP mailboxes (any IMAPS server — QQ/163/Gmail etc.) and writes incoming mail into the activity timeline (poll mode, TLS)"
@@ -253,7 +253,7 @@
       "tier": "trusted",
       "author": "Folyn",
       "icon": "@",
-      "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/folyn-email-collector-0.1.1/folyn-email-collector-0.1.1.zip"
+      "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/folyn-email-collector-0.3.0/folyn-email-collector-0.3.0.zip"
     },
     {
       "id": "folyn-subscriptions",
@@ -265,7 +265,7 @@
         "de": "Abonnements",
         "es": "Suscripciones"
       },
-      "version": "0.0.2",
+      "version": "0.1.0",
       "description": {
         "zh": "博客与网站订阅：离线阅读、流式翻译、选段追问与笔记。需要包含订阅接口更新的 Folyn 宿主。",
         "en": "Blog and website subscriptions with offline reading, streaming translation, selected-passage chat and notes. Requires Folyn with the subscriptions host API update.",
@@ -277,7 +277,7 @@
       "tier": "trusted",
       "author": "yiminlin",
       "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\"><circle cx=\"5\" cy=\"19\" r=\"1\"/><path d=\"M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16\"/></svg>",
-      "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/folyn-subscriptions-0.0.2/folyn-subscriptions.zip"
+      "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/folyn-subscriptions-0.1.0/folyn-subscriptions.zip"
     }
   ]
 }
