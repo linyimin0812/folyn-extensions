@@ -1,0 +1,42 @@
+{
+  "id": "folyn-work-schedule",
+  "name": "工作日程",
+  "version": "0.3.0",
+  "author": "yiminlin",
+  "folyn": ">=0.1.0",
+  "tier": "trusted",
+  "main": "dist/index.js",
+  "description": "按天记录工作事项：时间段、优先级、预估工时、标签、备注和关联文件；事项保存在应用中，不进入 Vault。",
+  "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"4.5\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M3 9.5h18M8 2.5v4M16 2.5v4\"/><path d=\"m8.5 15 2.2 2.2 4.8-4.7\"/></svg>",
+  "permissions": {
+    "fs": {
+      "scope": []
+    },
+    "http": {
+      "origins": []
+    },
+    "clipboard": false,
+    "dialog": false,
+    "window": false,
+    "vault": {
+      "readActive": false,
+      "insertContent": false
+    },
+    "ai": {
+      "chat": false,
+      "agents": [],
+      "edit": false
+    }
+  },
+  "contributes": {
+    "pages": [
+      {
+        "id": "work-schedule",
+        "title": "工作日程",
+        "component": "work-schedule",
+        "order": 70,
+        "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"4.5\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M3 9.5h18M8 2.5v4M16 2.5v4\"/><path d=\"m8.5 15 2.2 2.2 4.8-4.7\"/></svg>"
+      }
+    ]
+  }
+}

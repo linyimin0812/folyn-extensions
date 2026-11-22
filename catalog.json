@@ -278,6 +278,30 @@
       "author": "yiminlin",
       "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\"><circle cx=\"5\" cy=\"19\" r=\"1\"/><path d=\"M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16\"/></svg>",
       "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/folyn-subscriptions-0.1.0/folyn-subscriptions.zip"
+    },
+    {
+      "id": "folyn-work-schedule",
+      "name": {
+        "zh": "工作日程",
+        "en": "Work Schedule",
+        "ja": "作業スケジュール",
+        "fr": "Planning de travail",
+        "de": "Arbeitsplan",
+        "es": "Agenda de trabajo"
+      },
+      "version": "0.3.0",
+      "description": {
+        "zh": "按天记录工作事项：时间段、优先级、预估工时、标签、备注和关联文件；事项保存在应用中，不进入 Vault。",
+        "en": "Log work items by day: time slots, priority, estimated hours, tags, notes and linked files. Items are stored in the app, not in the Vault.",
+        "ja": "日ごとに作業を記録：時間帯、優先度、見積時間、タグ、メモ、関連ファイル。項目はアプリ内に保存され、Vault には入りません。",
+        "fr": "Notez vos tâches jour par jour : créneaux, priorité, heures estimées, étiquettes, notes et fichiers liés. Les éléments sont stockés dans l’application, pas dans le Vault.",
+        "de": "Arbeitsaufgaben pro Tag erfassen: Zeitfenster, Priorität, geschätzte Stunden, Tags, Notizen und verknüpfte Dateien. Einträge werden in der App gespeichert, nicht im Vault.",
+        "es": "Registra tareas por día: franjas horarias, prioridad, horas estimadas, etiquetas, notas y archivos vinculados. Los elementos se guardan en la app, no en el Vault."
+      },
+      "tier": "trusted",
+      "author": "yiminlin",
+      "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"4.5\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M3 9.5h18M8 2.5v4M16 2.5v4\"/><path d=\"m8.5 15 2.2 2.2 4.8-4.7\"/></svg>",
+      "downloadUrl": "https://github.com/linyimin0812/folyn-extensions/releases/download/folyn-work-schedule-0.3.0/folyn-work-schedule.zip"
     }
   ]
 }
