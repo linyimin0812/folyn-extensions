@@ -1,7 +1,7 @@
 {
   "id": "folyn-subscriptions",
   "name": "订阅",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "author": "yiminlin",
   "folyn": ">=0.1.0",
   "tier": "trusted",
@@ -23,16 +23,16 @@
     "vault": {
       "readActive": true,
       "readBinary": true,
-      "insertContent": true
+      "insertContent": true,
+      "write": true
     },
     "ai": {
       "chat": true,
       "agents": [],
       "edit": false
     },
-    "subscriptions": {
-      "vault": true,
-      "network": true,
+    "web": {
+      "fetch": true,
       "render": true
     }
   },

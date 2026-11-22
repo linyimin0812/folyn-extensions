@@ -90,7 +90,7 @@ export function harness() {
                 return { url, status: 200, headers: {}, body: article() };
             return { url, status: 404, headers: {}, body: 'Not found' };
         } };
-    const api = { subscriptions: support, ai: { async pairs() {
+    const api = { ai: { async pairs() {
                 return [{ provider: 'mock', model: 'test' }];
             }, async chat(params: {
                 prompt: string;
